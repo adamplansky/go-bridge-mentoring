@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/md5"
 	"errors"
 	"flag"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"time"
 )
 
 const (
@@ -76,7 +78,9 @@ func main() {
 	}
 
 	c := &http.Client{}
-	req, err := http.NewRequest(http.MethodGet, cfg.Url.String(), nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, cfg.Url.String(), nil)
 	if err != nil {
 		logErr(err)
 	}
@@ -92,6 +96,7 @@ func main() {
 
 	if len(cfg.ChunkedPrefix) > 0 {
 		chunked, err := NewChunked(cfg.ChunkedPrefix)
+		defer chunked.Close()
 		if err != nil {
 			logErr(err)
 		}
@@ -127,17 +132,24 @@ type Chunked struct {
 	fileSize int
 }
 
-func NewChunked(prefix string) (*Chunked, error) {
+func NewChunked(prefix string) (io.WriteCloser, error) {
 	ch := Chunked{Prefix: prefix}
 	err := ch.createChunkedFile()
 	return &ch, err
 }
 
 func (c *Chunked) createChunkedFile() error {
+	if err := c.Close(); err != nil {
+		return err
+	}
 	f, err := os.Create(fmt.Sprintf("%s.%d", c.Prefix, c.idx))
 	c.idx++
 	c.F = f
 	return err
+}
+
+func (c *Chunked) Close() error {
+	return c.F.Close()
 }
 
 func (c *Chunked) Write(p []byte) (int, error) {
