@@ -127,21 +127,24 @@ type Chunked struct {
 	fileSize int
 }
 
-func NewChunked(p string) (*Chunked, error) {
-	i := 0
-	f, err := os.Create(fmt.Sprintf("%s.%d", p, i))
-	return &Chunked{
-		Prefix:   p,
-		F:        f,
-		idx:      i + 1,
-		fileSize: 0,
-	}, err
+func NewChunked(prefix string) (*Chunked, error) {
+	ch := Chunked{Prefix: prefix}
+	err := ch.createChunkedFile()
+	return &ch, err
+}
+
+func (c *Chunked) createChunkedFile() error {
+	f, err := os.Create(fmt.Sprintf("%s.%d", c.Prefix, c.idx))
+	c.idx++
+	c.F = f
+	return err
 }
 
 func (c *Chunked) Write(p []byte) (int, error) {
 	pLen := len(p)
-
-	if pLen < chunkedSize-c.fileSize {
+	freeSpace := chunkedSize - c.fileSize
+	// enough free space in chunk, copy all bytes
+	if pLen < freeSpace {
 		_, err := c.F.Write(p)
 		if err != nil {
 			return 0, err
@@ -151,21 +154,24 @@ func (c *Chunked) Write(p []byte) (int, error) {
 		return len(p), nil
 	}
 
-	off := chunkedSize - c.fileSize
-	_, err := c.F.Write(p[:off])
+	// not enough free space in chunk
+	// first fill empty space in first chunk
+	_, err := c.F.Write(p[:freeSpace])
 	if err != nil {
 		return 0, err
 	}
-	c.F, err = os.Create(fmt.Sprintf("%s.%d", c.Prefix, c.idx))
-	c.idx++
+
+	// create second chunk
+	err = c.createChunkedFile()
 	if err != nil {
-		return off, err
+		return freeSpace, err
 	}
-	c.fileSize = pLen - off
-	_, err = c.F.Write(p[off:])
+
+	c.fileSize = pLen - freeSpace
+	// copy leftover to the second chunk
+	_, err = c.F.Write(p[freeSpace:])
 	if err != nil {
 		return pLen, err
 	}
 	return len(p), nil
-
 }
