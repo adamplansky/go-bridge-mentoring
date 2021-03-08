@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/md5"
 	"errors"
 	"flag"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"time"
 )
 
 const (
@@ -75,7 +77,9 @@ func main() {
 	}
 
 	c := &http.Client{}
-	req, err := http.NewRequest(http.MethodGet, cfg.Url.String(), nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, cfg.Url.String(), nil)
 	if err != nil {
 		logErr(err)
 	}
@@ -96,8 +100,6 @@ func main() {
 		}
 		defer chunker.Close()
 		chunked := NewChunked(chunker, floppySize)
-
-
 		r = io.TeeReader(resp.Body, chunked)
 	}
 
