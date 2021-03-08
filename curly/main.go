@@ -9,7 +9,6 @@ import (
 	"go.uber.org/multierr"
 	"io"
 	"log"
-	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
@@ -30,14 +29,14 @@ var (
 )
 
 type Config struct {
-	MD5                   bool
-	ChunkedPrefix         string
-	Std                   io.Writer
-	DownloadURL           *url.URL
-	Upload                bool
-	UploadFile, UploadURL string
-	Verbose               bool
-	errs                  []error
+	MD5           bool
+	ChunkedPrefix string
+	Std           io.Writer
+	DownloadURL   *url.URL
+	Upload        bool
+	UploadURL     string
+	Verbose       bool
+	errs          []error
 }
 
 // https://github.com/mayth/go-simple-upload-server
@@ -47,12 +46,6 @@ func ParseConfig() *Config {
 	//var outputFlag, outputChunked string
 
 	flag.Func("output", "output is downloaded to file, if value is '-' output is stdout, if output is not specified file is printed to /dev/null", func(outputFlag string) error {
-		var err error
-		cfg.DownloadURL, err = url.Parse(flag.Args()[0])
-		if err != nil {
-			log.Fatal("unable parse arg flag: %w", err)
-		}
-
 		switch {
 		case outputFlag == "-":
 			cfg.Std = stdout
@@ -70,14 +63,18 @@ func ParseConfig() *Config {
 	flag.StringVar(&cfg.ChunkedPrefix, "output-chunked", "", "FILEPREFIX, content is splitted to 3.5 Mb files FILEPREFIX.0 FILEPREFIX.1")
 	flag.BoolVar(&cfg.MD5, "md5", false, "prints md5 sum of file into stderr")
 	flag.BoolVar(&cfg.Upload, "upload", false, "upload file true/false")
-	flag.StringVar(&cfg.UploadFile, "uploadfile", "", "upload file")
 	flag.StringVar(&cfg.UploadURL, "uploadurl", "", "upload url")
 	flag.BoolVar(&cfg.Verbose, "verbose", false, "verbose output")
 
 	flag.Parse()
 
-	if !cfg.Upload && len(flag.Args()) == 0 {
+	if len(flag.Args()) == 0 {
 		log.Fatal("no file to download")
+	}
+	var err error
+	cfg.DownloadURL, err = url.Parse(flag.Args()[0])
+	if err != nil {
+		log.Fatal("unable parse arg flag: %w", err)
 	}
 
 	return &cfg
@@ -87,65 +84,11 @@ func (cfg *Config) ValidateUpload() error {
 	if cfg.UploadURL == "" {
 		cfg.errs = append(cfg.errs, errors.New("uploadurl not specified"))
 	}
-	if cfg.UploadFile == "" {
-		cfg.errs = append(cfg.errs, errors.New("uploadfile not specified"))
-	}
 	return multierr.Combine(cfg.errs...)
 }
 
 func main() {
 	cfg := ParseConfig()
-	if cfg.Upload {
-		err := cfg.ValidateUpload()
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		file, err := os.Open(cfg.UploadFile)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		rBody, wPipe := io.Pipe()
-		//defer wPipe.Close()
-
-		wMultiPart := multipart.NewWriter(wPipe)
-
-		go func() {
-			defer wPipe.Close()
-			defer wMultiPart.Close()
-
-			if err = UploadGZIP(wMultiPart, file, cfg.UploadFile); err != nil {
-				log.Fatal(err)
-			}
-		}()
-
-		c := &http.Client{
-			Transport: rounttripper.New(),
-			Timeout:   10 * time.Second,
-		}
-		req, err := http.NewRequest(http.MethodPost, cfg.UploadURL, rBody)
-		if err != nil {
-			log.Fatal(err)
-		}
-		req.Header.Set("Content-Type", wMultiPart.FormDataContentType())
-		req.Header.Add("Content-Encoding", "gzip")
-
-
-		if cfg.Verbose {
-			log.Printf("")
-		}
-
-		resp, err := c.Do(req)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		defer resp.Body.Close()
-		log.Printf("response upload: %#v\n", resp)
-
-		os.Exit(0)
-	}
 
 	c := &http.Client{}
 	req, err := http.NewRequest(http.MethodGet, cfg.DownloadURL.String(), nil)
@@ -172,6 +115,45 @@ func main() {
 
 	if cfg.MD5 {
 		r = io.TeeReader(r, h)
+	}
+
+	if cfg.Upload {
+		err := cfg.ValidateUpload()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		rBody, wPipe := io.Pipe()
+
+		go func() {
+			defer wPipe.Close()
+
+			if err = UploadGZIP(r, wPipe); err != nil {
+				log.Fatal(err)
+			}
+		}()
+
+		c := &http.Client{
+			Transport: rounttripper.New(),
+			Timeout:   10 * time.Second,
+		}
+		req, err := http.NewRequest(http.MethodPost, cfg.UploadURL, rBody)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		req.Header.Add("Content-Encoding", "gzip")
+		//req.Header.Add("Content-Type", wPipe.FormDataContentType())
+
+		resp, err := c.Do(req)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		defer resp.Body.Close()
+		log.Printf("response upload: %#v\n", resp)
+
+		os.Exit(0)
 	}
 
 	if _, err := io.Copy(cfg.Std, r); err != nil {

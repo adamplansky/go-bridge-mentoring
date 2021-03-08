@@ -2,22 +2,14 @@ package main
 
 import (
 	"compress/gzip"
-	"fmt"
 	"io"
-	"mime/multipart"
 )
 
-func UploadGZIP(wMultiPart *multipart.Writer, r io.Reader, filename string) error {
-	part, err := wMultiPart.CreateFormFile("file", fmt.Sprintf("%s.gz", filename))
-	if err != nil {
-		return err
-	}
+func UploadGZIP(r io.Reader, w io.Writer) error {
 
-	gzipW := gzip.NewWriter(part)
+	gzipW := gzip.NewWriter(w)
 	defer gzipW.Close()
 
-	if _, err = io.Copy(gzipW, r); err != nil {
-		return err
-	}
-	return nil
+	_, err := io.Copy(gzipW, r)
+	return err
 }
