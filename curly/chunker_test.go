@@ -12,7 +12,6 @@ var _ Chunker = &testChunked{}
 type testChunked struct {
 	multiBuffer []*bytes.Buffer
 	buf         *bytes.Buffer
-	idx         int
 }
 
 func NewTestChunked() *testChunked {
@@ -22,7 +21,6 @@ func NewTestChunked() *testChunked {
 			&buf,
 		},
 		buf: &buf,
-		idx: 0,
 	}
 }
 
@@ -35,12 +33,10 @@ func (c *testChunked) Write(p []byte) (n int, err error) {
 }
 
 func (c *testChunked) NewChunk() error {
-	c.idx++
-	var err error
 	var buf bytes.Buffer
 	c.buf = &buf
 	c.multiBuffer = append(c.multiBuffer, &buf)
-	return err
+	return nil
 }
 
 func TestChunked_Write(t *testing.T) {
