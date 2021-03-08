@@ -19,8 +19,7 @@ const (
 )
 
 var (
-	stdout = os.Stdout
-	//stdnull = os.NewFile(0, os.DevNull)
+	stdout  = os.Stdout
 	stdnull = io.Discard
 	stderr  = os.Stderr
 )
@@ -114,8 +113,6 @@ func main() {
 	if cfg.MD5 {
 		_, _ = fmt.Fprintf(stderr, "%x\n", h.Sum(nil))
 	}
-
-	os.Exit(0)
 }
 
 func logErr(err error) {
