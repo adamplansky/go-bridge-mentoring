@@ -12,9 +12,8 @@ import (
 )
 
 const (
-	//megabyte    = 1 << 20
-	floppySize = 1_474_560 // floppy disk size
-	// 1.44 * 1000 * 1024
+	// floppy disk size = 1.44 * 1000 * 1024
+	floppySize = 1_474_560
 )
 
 var (
@@ -91,10 +90,14 @@ func main() {
 	h := md5.New()
 
 	if len(cfg.ChunkedPrefix) > 0 {
-		chunked, err := NewChunked(cfg.ChunkedPrefix)
+		chunker, err := NewFileChunker(cfg.ChunkedPrefix)
 		if err != nil {
 			logErr(err)
 		}
+		defer chunker.Close()
+		chunked := NewChunked(chunker, floppySize)
+
+
 		r = io.TeeReader(resp.Body, chunked)
 	}
 
@@ -116,61 +119,4 @@ func main() {
 func logErr(err error) {
 	_, _ = stderr.Write([]byte(err.Error()))
 	os.Exit(1)
-}
-
-var _ io.Writer = (*Chunked)(nil)
-
-type Chunked struct {
-	w              io.WriteCloser
-	size           int
-	maxSize        int
-	floppyCreateFn func() (io.WriteCloser, error)
-}
-
-func fileFloppyFn(p string) func() (io.WriteCloser, error) {
-	i := -1
-	prefix := p
-	return func() (io.WriteCloser, error) {
-		i++
-		return os.Create(fmt.Sprintf("%s.%d", prefix, i))
-	}
-}
-
-func NewChunked(prefix string) (*Chunked, error) {
-	floppyFunc := fileFloppyFn(prefix)
-	w, err := floppyFunc()
-	return &Chunked{
-		w:              w,
-		size:           0,
-		maxSize:        floppySize,
-		floppyCreateFn: floppyFunc,
-	}, err
-}
-
-func (c *Chunked) Write(p []byte) (int, error) {
-	if len(p) < c.maxSize-c.size {
-		n, err := c.w.Write(p)
-		if err != nil {
-			return 0, err
-		}
-		c.size += n
-		return n, nil
-	}
-
-	off := c.maxSize - c.size
-	n, err := c.w.Write(p[:off])
-	if err != nil {
-		return n, err
-	}
-	c.w, err = c.floppyCreateFn()
-	if err != nil {
-		return n, err
-	}
-	c.size = len(p) - off
-	n, err = c.w.Write(p[off:])
-	if err != nil {
-		return n, err
-	}
-	return n, nil
-
 }
