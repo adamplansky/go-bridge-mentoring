@@ -14,14 +14,12 @@ import (
 )
 
 const (
-	//megabyte    = 1 << 20
-	chunkedSize = 1_474_560 // floppy disk size
-	// 1.44 * 1000 * 1024
+	// floppy disk size = 1.44 * 1000 * 1024
+	floppySize = 1_474_560
 )
 
 var (
-	stdout = os.Stdout
-	//stdnull = os.NewFile(0, os.DevNull)
+	stdout  = os.Stdout
 	stdnull = io.Discard
 	stderr  = os.Stderr
 )
@@ -95,11 +93,12 @@ func main() {
 	h := md5.New()
 
 	if len(cfg.ChunkedPrefix) > 0 {
-		chunked, err := NewChunked(cfg.ChunkedPrefix)
-		defer chunked.Close()
+		chunker, err := NewFileChunker(cfg.ChunkedPrefix)
 		if err != nil {
 			logErr(err)
 		}
+		defer chunker.Close()
+		chunked := NewChunked(chunker, floppySize)
 		r = io.TeeReader(resp.Body, chunked)
 	}
 
@@ -114,76 +113,9 @@ func main() {
 	if cfg.MD5 {
 		_, _ = fmt.Fprintf(stderr, "%x\n", h.Sum(nil))
 	}
-
-	os.Exit(0)
 }
 
 func logErr(err error) {
 	_, _ = stderr.Write([]byte(err.Error()))
 	os.Exit(1)
-}
-
-var _ io.Writer = (*Chunked)(nil)
-
-type Chunked struct {
-	Prefix   string
-	F        *os.File
-	idx      int
-	fileSize int
-}
-
-func NewChunked(prefix string) (io.WriteCloser, error) {
-	ch := Chunked{Prefix: prefix}
-	err := ch.createChunkedFile()
-	return &ch, err
-}
-
-func (c *Chunked) createChunkedFile() error {
-	if err := c.Close(); err != nil {
-		return err
-	}
-	f, err := os.Create(fmt.Sprintf("%s.%d", c.Prefix, c.idx))
-	c.idx++
-	c.F = f
-	return err
-}
-
-func (c *Chunked) Close() error {
-	return c.F.Close()
-}
-
-func (c *Chunked) Write(p []byte) (int, error) {
-	pLen := len(p)
-	freeSpace := chunkedSize - c.fileSize
-	// enough free space in chunk, copy all bytes
-	if pLen < freeSpace {
-		_, err := c.F.Write(p)
-		if err != nil {
-			return 0, err
-		}
-		c.fileSize += pLen
-
-		return len(p), nil
-	}
-
-	// not enough free space in chunk
-	// first fill empty space in first chunk
-	_, err := c.F.Write(p[:freeSpace])
-	if err != nil {
-		return 0, err
-	}
-
-	// create second chunk
-	err = c.createChunkedFile()
-	if err != nil {
-		return freeSpace, err
-	}
-
-	c.fileSize = pLen - freeSpace
-	// copy leftover to the second chunk
-	_, err = c.F.Write(p[freeSpace:])
-	if err != nil {
-		return pLen, err
-	}
-	return len(p), nil
 }
