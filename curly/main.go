@@ -1,29 +1,29 @@
 package main
 
 import (
+	"context"
 	"crypto/md5"
-	"curly/rounttripper"
+	"curly/roundtripper"
+	"curly/upload"
 	"errors"
 	"flag"
 	"fmt"
-	"go.uber.org/multierr"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"time"
 )
 
 const (
-	//megabyte    = 1 << 20
-	floppySize = 1_474_560 // floppy disk size
-	// 1.44 * 1000 * 1024
+	// floppy disk size = 1.44 * 1000 * 1024
+	floppySize = 1_474_560
 )
 
 var (
-	stdout = os.Stdout
-	//stdnull = os.NewFile(0, os.DevNull)
+	stdout  = os.Stdout
 	stdnull = io.Discard
 	stderr  = os.Stderr
 )
@@ -82,16 +82,18 @@ func ParseConfig() *Config {
 
 func (cfg *Config) ValidateUpload() error {
 	if cfg.UploadURL == "" {
-		cfg.errs = append(cfg.errs, errors.New("uploadurl not specified"))
+		return errors.New("uploadurl not specified")
 	}
-	return multierr.Combine(cfg.errs...)
+	return nil
 }
 
 func main() {
 	cfg := ParseConfig()
 
 	c := &http.Client{}
-	req, err := http.NewRequest(http.MethodGet, cfg.DownloadURL.String(), nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, cfg.DownloadURL.String(), nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -106,10 +108,12 @@ func main() {
 	h := md5.New()
 
 	if len(cfg.ChunkedPrefix) > 0 {
-		chunked, err := NewChunked(cfg.ChunkedPrefix)
+		chunker, err := NewFileChunker(cfg.ChunkedPrefix)
 		if err != nil {
 			log.Fatal(err)
 		}
+		defer chunker.Close()
+		chunked := NewChunked(chunker, floppySize)
 		r = io.TeeReader(resp.Body, chunked)
 	}
 
@@ -118,32 +122,17 @@ func main() {
 	}
 
 	if cfg.Upload {
-		err := cfg.ValidateUpload()
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		rBody, wPipe := io.Pipe()
-
-		go func() {
-			defer wPipe.Close()
-
-			if err = UploadGZIP(r, wPipe); err != nil {
-				log.Fatal(err)
-			}
-		}()
-
 		c := &http.Client{
-			Transport: rounttripper.New(),
+			Transport: roundtripper.New(),
 			Timeout:   10 * time.Second,
 		}
-		req, err := http.NewRequest(http.MethodPost, cfg.UploadURL, rBody)
+		u := upload.New(c, cfg.UploadURL)
+		n := path.Base(cfg.DownloadURL.Path)
+
+		req, err := u.Upload(r, n)
 		if err != nil {
 			log.Fatal(err)
 		}
-
-		req.Header.Add("Content-Encoding", "gzip")
-		//req.Header.Add("Content-Type", wPipe.FormDataContentType())
 
 		resp, err := c.Do(req)
 		if err != nil {
@@ -152,8 +141,6 @@ func main() {
 
 		defer resp.Body.Close()
 		log.Printf("response upload: %#v\n", resp)
-
-		os.Exit(0)
 	}
 
 	if _, err := io.Copy(cfg.Std, r); err != nil {
@@ -161,65 +148,8 @@ func main() {
 	}
 
 	if cfg.MD5 {
-		_, _ = fmt.Fprintf(stderr, "%x\n", h.Sum(nil))
+		_, _ = fmt.Fprintf(stderr, "file md5 sum: %x\n", h.Sum(nil))
 	}
 
 	os.Exit(0)
-}
-
-var _ io.Writer = (*Chunked)(nil)
-
-type Chunked struct {
-	w              io.WriteCloser
-	size           int
-	maxSize        int
-	floppyCreateFn func() (io.WriteCloser, error)
-}
-
-func fileFloppyFn(p string) func() (io.WriteCloser, error) {
-	i := -1
-	prefix := p
-	return func() (io.WriteCloser, error) {
-		i++
-		return os.Create(fmt.Sprintf("%s.%d", prefix, i))
-	}
-}
-
-func NewChunked(prefix string) (*Chunked, error) {
-	floppyFunc := fileFloppyFn(prefix)
-	w, err := floppyFunc()
-	return &Chunked{
-		w:              w,
-		size:           0,
-		maxSize:        floppySize,
-		floppyCreateFn: floppyFunc,
-	}, err
-}
-
-func (c *Chunked) Write(p []byte) (int, error) {
-	if len(p) < c.maxSize-c.size {
-		n, err := c.w.Write(p)
-		if err != nil {
-			return 0, err
-		}
-		c.size += n
-		return n, nil
-	}
-
-	off := c.maxSize - c.size
-	n, err := c.w.Write(p[:off])
-	if err != nil {
-		return n, err
-	}
-	c.w, err = c.floppyCreateFn()
-	if err != nil {
-		return n, err
-	}
-	c.size = len(p) - off
-	n, err = c.w.Write(p[off:])
-	if err != nil {
-		return n, err
-	}
-	return n, nil
-
 }

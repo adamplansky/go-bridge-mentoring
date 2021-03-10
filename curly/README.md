@@ -19,6 +19,7 @@ go run main.go --md5=true https://play.golang.org/p/HmnNoBf0p1z
 ```shell
 go build
 ./curly --output=foobig --output-chunked=foo --md5=true https://i.redd.it/dujlhm3dqh951.png
+./curly  -md5 -upload -uploadurl=http://localhost:25478/upload?token=f9403fc5f537b4ab332d https://i.redd.it/dujlhm3dqh951.png
 
 # d41d8cd98f00b204e9800998ecf8427e
 
@@ -28,6 +29,4 @@ b4be6a7103e47d6f8fe247d66d797bbd
 
 #md5sum foobig
 b4be6a7103e47d6f8fe247d66d797bbd  foobig
-
-
 ```
