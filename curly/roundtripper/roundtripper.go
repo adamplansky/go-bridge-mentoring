@@ -1,34 +1,44 @@
 package roundtripper
 
 import (
-	"log"
 	"net/http"
-	"os"
+	"net/http/httputil"
 )
 
-type myRoundTripper struct {
-	l *log.Logger
+type debugTransport struct {
+	l  Logger
+	rt http.RoundTripper
 }
 
-func New() http.RoundTripper {
-	return &myRoundTripper{l: log.New(os.Stdout, "New: ", log.Ldate)}
+type Logger interface {
+	Debugf(format string, args ...interface{})
 }
 
+func NewDebug(rt http.RoundTripper, l Logger) http.RoundTripper {
+	return &debugTransport{
+		rt: rt,
+		l:  l,
+	}
+}
 
-func (mrt *myRoundTripper) RoundTrip(r *http.Request) (*http.Response, error){
-	mrt.l.Println("req: http method: ", r.Method)
-	mrt.l.Printf("req: headers %+v", r.Header)
+func (dt *debugTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 
-
-	t := http.Transport{}
-	resp, err :=  t.RoundTrip(r)
+	b, err := httputil.DumpRequest(r, false)
 	if err != nil {
 		return nil, err
 	}
 
-	mrt.l.Println("resp: http code: ", resp.Status)
-	mrt.l.Printf("resp: headers %+v", r.Header)
+	dt.l.Debugf("request: %v", string(b))
 
+	resp, err := dt.rt.RoundTrip(r)
+	if err != nil {
+		return nil, err
+	}
+	b, err = httputil.DumpResponse(resp, false)
+	if err != nil {
+		return nil, err
+	}
+	dt.l.Debugf("response: %v", string(b))
 
 	return resp, nil
 }

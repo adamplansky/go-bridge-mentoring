@@ -5,11 +5,10 @@ import (
 	"crypto/md5"
 	"curly/roundtripper"
 	"curly/upload"
-	"errors"
 	"flag"
 	"fmt"
+	"go.uber.org/zap"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -40,7 +39,8 @@ type Config struct {
 }
 
 // https://github.com/mayth/go-simple-upload-server
-func ParseConfig() *Config {
+func ParseConfig(log *zap.SugaredLogger) *Config {
+
 	var cfg Config
 
 	//var outputFlag, outputChunked string
@@ -77,25 +77,34 @@ func ParseConfig() *Config {
 		log.Fatal("unable parse arg flag: %w", err)
 	}
 
+	if cfg.Upload && cfg.UploadURL == "" {
+		log.Fatal("no upload url specified")
+	}
+
 	return &cfg
 }
 
-func (cfg *Config) ValidateUpload() error {
-	if cfg.UploadURL == "" {
-		return errors.New("uploadurl not specified")
-	}
-	return nil
-}
-
 func main() {
-	cfg := ParseConfig()
+	logger, _ := zap.NewDevelopment()
+	log := logger.Sugar()
+	defer logger.Sync() // flushes buffer, if any
 
-	c := &http.Client{}
+	cfg := ParseConfig(log)
+
+	t := http.DefaultTransport
+	if cfg.Verbose {
+		t = roundtripper.NewDebug(t, logger.Sugar())
+	}
+
+	c := &http.Client{
+		Transport: t,
+		Timeout:   10 * time.Second,
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, cfg.DownloadURL.String(), nil)
 	if err != nil {
-		log.Fatal(err)
+		logger.Fatal(err.Error())
 	}
 
 	resp, err := c.Do(req)
@@ -122,10 +131,6 @@ func main() {
 	}
 
 	if cfg.Upload {
-		c := &http.Client{
-			Transport: roundtripper.New(),
-			Timeout:   10 * time.Second,
-		}
 		u := upload.New(c, cfg.UploadURL)
 		n := path.Base(cfg.DownloadURL.Path)
 
@@ -140,7 +145,6 @@ func main() {
 		}
 
 		defer resp.Body.Close()
-		log.Printf("response upload: %#v\n", resp)
 	}
 
 	if _, err := io.Copy(cfg.Std, r); err != nil {
@@ -148,7 +152,8 @@ func main() {
 	}
 
 	if cfg.MD5 {
-		_, _ = fmt.Fprintf(stderr, "file md5 sum: %x\n", h.Sum(nil))
+		msg := fmt.Sprintf("MD5 sum: %x", h.Sum(nil))
+		log.Errorw(msg)
 	}
 
 	os.Exit(0)
