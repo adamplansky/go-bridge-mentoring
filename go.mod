@@ -3,6 +3,7 @@ module github.com/adamplansky/go-bridge-mentoring
 go 1.16
 
 require (
+	github.com/PuerkitoBio/goquery v1.6.1 // indirect
 	github.com/google/go-cmp v0.5.5
 	github.com/stretchr/testify v1.7.0
 	go.uber.org/multierr v1.6.0 // indirect

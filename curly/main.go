@@ -5,15 +5,17 @@ import (
 	"crypto/md5"
 	"flag"
 	"fmt"
-	"github.com/adamplansky/go-bridge-mentoring/curly/roundtripper"
-	"github.com/adamplansky/go-bridge-mentoring/curly/upload"
-	"go.uber.org/zap"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"path"
 	"time"
+
+	"go.uber.org/zap"
+
+	"github.com/adamplansky/go-bridge-mentoring/curly/roundtripper"
+	"github.com/adamplansky/go-bridge-mentoring/curly/upload"
 )
 
 const (
