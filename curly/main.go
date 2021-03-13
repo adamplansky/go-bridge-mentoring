@@ -3,10 +3,10 @@ package main
 import (
 	"context"
 	"crypto/md5"
-	"curly/roundtripper"
-	"curly/upload"
 	"flag"
 	"fmt"
+	"github.com/adamplansky/go-bridge-mentoring/curly/roundtripper"
+	"github.com/adamplansky/go-bridge-mentoring/curly/upload"
 	"go.uber.org/zap"
 	"io"
 	"net/http"
