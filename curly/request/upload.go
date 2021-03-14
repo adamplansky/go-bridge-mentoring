@@ -35,7 +35,7 @@ func UploadGZIP(uploadURL string, filename string, r io.Reader) (*http.Request, 
 	gzfilename := fmt.Sprintf("%s.gz", filename)
 	part, err := writer.CreateFormFile("file", gzfilename)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create form file: %w", err)
 	}
 	gzipW := gzip.NewWriter(part)
 

@@ -26,7 +26,7 @@ func (c *Chunked) Write(p []byte) (int, error) {
 	if len(p) < c.maxSize-c.size {
 		n, err := c.chunker.Write(p)
 		if err != nil {
-			return 0, err
+			return 0, fmt.Errorf("chunked.Write: %w", err)
 		}
 		c.size += n
 		return n, nil
@@ -35,11 +35,11 @@ func (c *Chunked) Write(p []byte) (int, error) {
 	off := c.maxSize - c.size
 	n, err := c.chunker.Write(p[:off])
 	if err != nil {
-		return n, err
+		return n, fmt.Errorf("chunked.Write offset: %w", err)
 	}
 	err = c.chunker.NewChunk()
 	if err != nil {
-		return n, err
+		return n, fmt.Errorf("chunked.NewChunk: %w", err)
 	}
 	c.size = 0
 	return c.Write(p[off:])
@@ -63,17 +63,23 @@ func NewFileChunker(prefix string) (Chunker, error) {
 	}
 	var err error
 	chunker.file, err = os.Create(filename(chunker.prefix, chunker.idx))
-	return &chunker, err
+	if err != nil {
+		return nil, fmt.Errorf("NewFileChunker unable to create file %w", err)
+	}
+	return &chunker, nil
 }
 
 func (f *fileChunker) NewChunk() error {
 	f.idx++
 	var err error
 	if err = f.file.Close(); err != nil {
-		return err
+		return fmt.Errorf("NewChunk close: %w", err)
 	}
 	f.file, err = os.Create(filename(f.prefix, f.idx))
-	return err
+	if err != nil {
+		return fmt.Errorf("NewChunk unable to create file %w", err)
+	}
+	return nil
 }
 
 func (f *fileChunker) Write(p []byte) (int, error) {

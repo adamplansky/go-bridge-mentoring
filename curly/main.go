@@ -27,7 +27,6 @@ const (
 var (
 	stdout  = os.Stdout
 	stdnull = io.Discard
-	stderr  = os.Stderr
 )
 
 type Config struct {
@@ -38,7 +37,6 @@ type Config struct {
 	Upload        bool
 	UploadURL     *url.URL
 	Verbose       bool
-	errs          []error
 }
 
 // https://github.com/mayth/go-simple-upload-server
