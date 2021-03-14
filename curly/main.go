@@ -147,16 +147,26 @@ func run() error {
 		pipeR, pipeW := io.Pipe()
 		tr := io.TeeReader(r, pipeW)
 		go func() {
-			defer pipeW.Close()
+			var err error
+			defer func() {
+				if err != nil {
+					_ = pipeW.CloseWithError(err)
+				} else {
+					_ = pipeW.Close()
+				}
+			}()
+
 			fname := path.Base(cfg.DownloadURL.Path)
 			req, err := request.UploadGZIP(cfg.UploadURL.String(), fname, tr)
 			if err != nil {
-				_ = pipeW.CloseWithError(err)
+				err = fmt.Errorf("unable to create UploadGZIP request : %w", err)
+				return
 			}
 
 			_, err = c.Do(req)
 			if err != nil {
-				_ = pipeW.CloseWithError(err)
+				err = fmt.Errorf("upload do failed: %w", err)
+				return
 			}
 			log.Debugf("upload has finished successfuly: %s", cfg.UploadURL)
 		}()
