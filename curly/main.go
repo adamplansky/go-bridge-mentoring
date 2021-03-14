@@ -1,18 +1,18 @@
 package main
 
 import (
-	"compress/gzip"
 	"context"
 	"crypto/md5"
 	"flag"
 	"fmt"
 	"io"
-	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
 	"path"
 	"time"
+
+	"github.com/adamplansky/go-bridge-mentoring/curly/request"
 
 	"go.uber.org/zap"
 
@@ -124,7 +124,6 @@ func main() {
 	defer resp.Body.Close()
 
 	r := io.Reader(resp.Body)
-	h := md5.New()
 
 	if len(cfg.ChunkedPrefix) > 0 {
 		chunker, err := NewFileChunker(cfg.ChunkedPrefix)
@@ -136,83 +135,30 @@ func main() {
 		r = io.TeeReader(resp.Body, chunked)
 	}
 
+	h := md5.New()
 	if cfg.MD5 {
 		r = io.TeeReader(r, h)
 	}
 
+	pr, pw := io.Pipe()
+	tr := io.TeeReader(r, pw)
 	if cfg.Upload {
-		//u, err := upload.New(c, cfg.UploadURL)
-		//if err != nil {
-		//	log.Fatal(err)
-		//}
-		//done := make(chan bool)
-		//defer close(done)
-
-		rBody, wPipe := io.Pipe()
 		go func() {
+			defer pw.Close()
 			fname := path.Base(cfg.DownloadURL.Path)
-
-			//r2 := io.TeeReader(r, wPipe)
-			writer := multipart.NewWriter(wPipe)
-
-			defer wPipe.Close()
-			defer writer.Close()
-
-			gzfilename := fmt.Sprintf("%s.gz", fname)
-			part, err := writer.CreateFormFile("file", gzfilename)
+			req, err := request.UploadGZIP(cfg.UploadURL.String(), fname, tr)
 			if err != nil {
-				_ = wPipe.CloseWithError(err)
-			}
-			gzipW := gzip.NewWriter(part)
-			defer gzipW.Close()
-
-			req, err := http.NewRequest(http.MethodPost, cfg.UploadURL.String(), rBody)
-			if err != nil {
-				err := fmt.Errorf("upload io.copy: %w", err)
-				_ = wPipe.CloseWithError(err)
-			}
-
-			req.Header.Add("Content-Encoding", "gzip")
-			req.Header.Add("Content-Type", writer.FormDataContentType())
-			if err != nil {
-				_ = wPipe.CloseWithError(err)
+				log.Fatal(err)
 			}
 
 			_, err = c.Do(req)
 			if err != nil {
-				_ = wPipe.CloseWithError(err)
-			}
-			defer resp.Body.Close()
-
-			//_, err = io.Copy(gzipW, r)
-			//if err != nil {
-			//	_ = wPipe.CloseWithError(fmt.Errorf("upload io.copy: %w", err))
-			//}
-			//done <- true
-		}()
-		//
-		//b, err := io.ReadAll(rBody)
-		//if err != nil {
-		//	log.Fatal(err)
-		//}
-		//fmt.Println("--------------")
-		//fmt.Println("body: ", string(b))
-		//fmt.Println("--------------")
-
-		r := io.TeeReader(rBody, wPipe)
-		go func(r io.Reader) {
-			if _, err := io.Copy(wPipe, r); err != nil {
 				log.Fatal(err)
 			}
-		}(rBody)
-
-		if _, err := io.Copy(cfg.Std, r); err != nil {
-			log.Fatal(err)
-		}
-		os.Exit(0)
+		}()
 
 	}
-	if _, err := io.Copy(cfg.Std, r); err != nil {
+	if _, err := io.Copy(cfg.Std, pr); err != nil {
 		log.Fatal(err)
 	}
 
