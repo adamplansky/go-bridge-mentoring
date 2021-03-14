@@ -41,13 +41,12 @@ type Config struct {
 }
 
 // https://github.com/mayth/go-simple-upload-server
-func ParseConfig(log *zap.SugaredLogger) *Config {
+func ParseConfig(log *zap.SugaredLogger) (*Config, error) {
 
 	cfg := Config{
 		// default value to prevent panic nil std.writer
 		Std: stdnull,
 	}
-
 	flag.Func("output", "output is downloaded to file, if value is '-' output is stdout, if output is not specified file is printed to /dev/null", func(outputFlag string) error {
 		switch {
 		case outputFlag == "-":
@@ -55,7 +54,7 @@ func ParseConfig(log *zap.SugaredLogger) *Config {
 		case len(outputFlag) > 0:
 			f, err := os.Create(outputFlag)
 			if err != nil {
-				log.Fatal("unable to create os file: %w", err)
+				return fmt.Errorf("unable to create os file: %w", err)
 			}
 			cfg.Std = f
 		default:
@@ -69,7 +68,7 @@ func ParseConfig(log *zap.SugaredLogger) *Config {
 	flag.Func("uploadurl", "upload url", func(uploadURL string) error {
 		u, err := url.Parse(uploadURL)
 		if err != nil {
-			log.Fatal(err)
+			return fmt.Errorf("unable to parse upload url: %w", err)
 		}
 		cfg.UploadURL = u
 		return nil
@@ -79,19 +78,20 @@ func ParseConfig(log *zap.SugaredLogger) *Config {
 	flag.Parse()
 
 	if len(flag.Args()) == 0 {
-		log.Fatal("no file to download")
+		return nil, fmt.Errorf("no file to download")
 	}
 	var err error
 	cfg.DownloadURL, err = url.Parse(flag.Args()[0])
 	if err != nil {
-		log.Fatal("unable parse arg flag: %w", err)
+		return nil, fmt.Errorf("unable parse arg flag: %w", err)
+
 	}
 
 	if cfg.Upload && cfg.UploadURL == nil {
-		log.Fatal("no upload url specified")
+		return nil, fmt.Errorf("no upload url specified")
 	}
 
-	return &cfg
+	return &cfg, nil
 }
 
 func run() error {
@@ -99,7 +99,10 @@ func run() error {
 	log := logger.Sugar()
 	defer logger.Sync() // flushes buffer, if any
 
-	cfg := ParseConfig(log)
+	cfg, err := ParseConfig(log)
+	if err != nil {
+		return fmt.Errorf("failed to parse config: %w", err)
+	}
 
 	t := http.DefaultTransport
 	if cfg.Verbose {
@@ -128,7 +131,7 @@ func run() error {
 	if len(cfg.ChunkedPrefix) > 0 {
 		chunker, err := NewFileChunker(cfg.ChunkedPrefix)
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 		defer chunker.Close()
 		chunked := NewChunked(chunker, floppySize)
@@ -155,13 +158,15 @@ func run() error {
 			if err != nil {
 				_ = pipeW.CloseWithError(err)
 			}
+			log.Debugf("upload has finished successfuly: %s", cfg.UploadURL)
 		}()
 		r = pipeR
 	}
 
 	if _, err := io.Copy(cfg.Std, r); err != nil {
-		return err
+		return fmt.Errorf("io.Copy failed: %w", err)
 	}
+	log.Debugf("download has finished successfuly: %s", cfg.DownloadURL)
 
 	if cfg.MD5 {
 		msg := fmt.Sprintf("MD5 sum: %x", h.Sum(nil))
@@ -172,7 +177,7 @@ func run() error {
 
 func main() {
 	if err := run(); err != nil {
-		log.Panic(err)
+		log.Fatal(err)
 	}
 	os.Exit(0)
 }
