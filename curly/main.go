@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -93,7 +94,7 @@ func ParseConfig(log *zap.SugaredLogger) *Config {
 	return &cfg
 }
 
-func main() {
+func run() error {
 	logger, _ := zap.NewDevelopment()
 	log := logger.Sugar()
 	defer logger.Sync() // flushes buffer, if any
@@ -113,12 +114,12 @@ func main() {
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, cfg.DownloadURL.String(), nil)
 	if err != nil {
-		logger.Fatal(err.Error())
+		return err
 	}
 
 	resp, err := c.Do(req)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer resp.Body.Close()
 
@@ -159,13 +160,19 @@ func main() {
 	}
 
 	if _, err := io.Copy(cfg.Std, r); err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	if cfg.MD5 {
 		msg := fmt.Sprintf("MD5 sum: %x", h.Sum(nil))
 		log.Errorw(msg)
 	}
+	return nil
+}
 
-	//os.Exit(0)
+func main() {
+	if err := run(); err != nil {
+		log.Panic(err)
+	}
+	os.Exit(0)
 }
