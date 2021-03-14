@@ -1,19 +1,22 @@
 package main
 
 import (
+	"compress/gzip"
 	"context"
 	"crypto/md5"
 	"flag"
 	"fmt"
-	"github.com/adamplansky/go-bridge-mentoring/curly/roundtripper"
-	"github.com/adamplansky/go-bridge-mentoring/curly/upload"
-	"go.uber.org/zap"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
 	"path"
 	"time"
+
+	"go.uber.org/zap"
+
+	"github.com/adamplansky/go-bridge-mentoring/curly/roundtripper"
 )
 
 const (
@@ -33,7 +36,7 @@ type Config struct {
 	Std           io.Writer
 	DownloadURL   *url.URL
 	Upload        bool
-	UploadURL     string
+	UploadURL     *url.URL
 	Verbose       bool
 	errs          []error
 }
@@ -63,7 +66,14 @@ func ParseConfig(log *zap.SugaredLogger) *Config {
 	flag.StringVar(&cfg.ChunkedPrefix, "output-chunked", "", "FILEPREFIX, content is splitted to 3.5 Mb files FILEPREFIX.0 FILEPREFIX.1")
 	flag.BoolVar(&cfg.MD5, "md5", false, "prints md5 sum of file into stderr")
 	flag.BoolVar(&cfg.Upload, "upload", false, "upload file true/false")
-	flag.StringVar(&cfg.UploadURL, "uploadurl", "", "upload url")
+	flag.Func("uploadurl", "upload url", func(uploadURL string) error {
+		u, err := url.Parse(uploadURL)
+		if err != nil {
+			log.Fatal(err)
+		}
+		cfg.UploadURL = u
+		return nil
+	})
 	flag.BoolVar(&cfg.Verbose, "verbose", false, "verbose output")
 
 	flag.Parse()
@@ -77,7 +87,7 @@ func ParseConfig(log *zap.SugaredLogger) *Config {
 		log.Fatal("unable parse arg flag: %w", err)
 	}
 
-	if cfg.Upload && cfg.UploadURL == "" {
+	if cfg.Upload && cfg.UploadURL == nil {
 		log.Fatal("no upload url specified")
 	}
 
@@ -100,7 +110,7 @@ func main() {
 		Transport: t,
 		Timeout:   10 * time.Second,
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, cfg.DownloadURL.String(), nil)
 	if err != nil {
@@ -131,22 +141,77 @@ func main() {
 	}
 
 	if cfg.Upload {
-		u := upload.New(c, cfg.UploadURL)
-		n := path.Base(cfg.DownloadURL.Path)
+		//u, err := upload.New(c, cfg.UploadURL)
+		//if err != nil {
+		//	log.Fatal(err)
+		//}
+		//done := make(chan bool)
+		//defer close(done)
 
-		req, err := u.Upload(r, n)
-		if err != nil {
+		rBody, wPipe := io.Pipe()
+		go func() {
+			fname := path.Base(cfg.DownloadURL.Path)
+
+			//r2 := io.TeeReader(r, wPipe)
+			writer := multipart.NewWriter(wPipe)
+
+			defer wPipe.Close()
+			defer writer.Close()
+
+			gzfilename := fmt.Sprintf("%s.gz", fname)
+			part, err := writer.CreateFormFile("file", gzfilename)
+			if err != nil {
+				_ = wPipe.CloseWithError(err)
+			}
+			gzipW := gzip.NewWriter(part)
+			defer gzipW.Close()
+
+			req, err := http.NewRequest(http.MethodPost, cfg.UploadURL.String(), rBody)
+			if err != nil {
+				err := fmt.Errorf("upload io.copy: %w", err)
+				_ = wPipe.CloseWithError(err)
+			}
+
+			req.Header.Add("Content-Encoding", "gzip")
+			req.Header.Add("Content-Type", writer.FormDataContentType())
+			if err != nil {
+				_ = wPipe.CloseWithError(err)
+			}
+
+			_, err = c.Do(req)
+			if err != nil {
+				_ = wPipe.CloseWithError(err)
+			}
+			defer resp.Body.Close()
+
+			//_, err = io.Copy(gzipW, r)
+			//if err != nil {
+			//	_ = wPipe.CloseWithError(fmt.Errorf("upload io.copy: %w", err))
+			//}
+			//done <- true
+		}()
+		//
+		//b, err := io.ReadAll(rBody)
+		//if err != nil {
+		//	log.Fatal(err)
+		//}
+		//fmt.Println("--------------")
+		//fmt.Println("body: ", string(b))
+		//fmt.Println("--------------")
+
+		r := io.TeeReader(rBody, wPipe)
+		go func(r io.Reader) {
+			if _, err := io.Copy(wPipe, r); err != nil {
+				log.Fatal(err)
+			}
+		}(rBody)
+
+		if _, err := io.Copy(cfg.Std, r); err != nil {
 			log.Fatal(err)
 		}
+		os.Exit(0)
 
-		resp, err := c.Do(req)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		defer resp.Body.Close()
 	}
-
 	if _, err := io.Copy(cfg.Std, r); err != nil {
 		log.Fatal(err)
 	}
