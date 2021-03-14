@@ -62,7 +62,7 @@ func NewFileChunker(prefix string) (Chunker, error) {
 		idx:    0,
 	}
 	var err error
-	chunker.file, err = os.Open(filename(chunker.prefix, chunker.idx))
+	chunker.file, err = os.Create(filename(chunker.prefix, chunker.idx))
 	return &chunker, err
 }
 

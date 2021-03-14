@@ -44,9 +44,10 @@ type Config struct {
 // https://github.com/mayth/go-simple-upload-server
 func ParseConfig(log *zap.SugaredLogger) *Config {
 
-	var cfg Config
-
-	//var outputFlag, outputChunked string
+	cfg := Config{
+		// default value to prevent panic nil std.writer
+		Std: stdnull,
+	}
 
 	flag.Func("output", "output is downloaded to file, if value is '-' output is stdout, if output is not specified file is printed to /dev/null", func(outputFlag string) error {
 		switch {
@@ -140,25 +141,26 @@ func main() {
 		r = io.TeeReader(r, h)
 	}
 
-	pr, pw := io.Pipe()
-	tr := io.TeeReader(r, pw)
 	if cfg.Upload {
+		pipeR, pipeW := io.Pipe()
+		tr := io.TeeReader(r, pipeW)
 		go func() {
-			defer pw.Close()
+			defer pipeW.Close()
 			fname := path.Base(cfg.DownloadURL.Path)
 			req, err := request.UploadGZIP(cfg.UploadURL.String(), fname, tr)
 			if err != nil {
-				log.Fatal(err)
+				_ = pipeW.CloseWithError(err)
 			}
 
 			_, err = c.Do(req)
 			if err != nil {
-				log.Fatal(err)
+				_ = pipeW.CloseWithError(err)
 			}
 		}()
-
+		r = pipeR
 	}
-	if _, err := io.Copy(cfg.Std, pr); err != nil {
+
+	if _, err := io.Copy(cfg.Std, r); err != nil {
 		log.Fatal(err)
 	}
 
@@ -167,5 +169,5 @@ func main() {
 		log.Errorw(msg)
 	}
 
-	os.Exit(0)
+	//os.Exit(0)
 }
