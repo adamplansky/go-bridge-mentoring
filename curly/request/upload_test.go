@@ -5,8 +5,10 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -68,4 +70,39 @@ func TestUpload(t *testing.T) {
 
 		})
 	}
+}
+
+func BenchmarkUploadAlloc(b *testing.B) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		err := r.ParseMultipartForm(5) // limit your max input length!
+		assert.NoError(b, err)
+
+		file, header, err := r.FormFile("file")
+		assert.NoError(b, err)
+		defer file.Close()
+
+		name := strings.Split(header.Filename, ".")
+		fmt.Printf("File name %s\n", name[0])
+
+		fmt.Println(io.ReadAll(r.Body))
+
+		_, err = io.Copy(w, file)
+		assert.NoError(b, err)
+	}))
+	defer ts.Close()
+
+	c := &http.Client{Timeout: 10 * time.Second}
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	lr := io.LimitReader(r, 1024)
+	req, err := UploadGZIP(ts.URL, "some-name", lr)
+	assert.NoError(b, err)
+
+	resp, err := c.Do(req)
+	assert.NoError(b, err)
+	defer resp.Body.Close()
+
+	_, err = io.Copy(os.Stdout, resp.Body)
+	assert.NoError(b, err)
+	fmt.Println()
+
 }
