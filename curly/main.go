@@ -144,33 +144,18 @@ func run() error {
 	}
 
 	if cfg.Upload {
-		pipeR, pipeW := io.Pipe()
-		tr := io.TeeReader(r, pipeW)
-		go func() {
-			var err error
-			defer func() {
-				if err != nil {
-					_ = pipeW.CloseWithError(err)
-				} else {
-					_ = pipeW.Close()
-				}
-			}()
+		fname := path.Base(cfg.DownloadURL.Path)
+		req, err := request.UploadGZIPZeroMemory(cfg.UploadURL.String(), fname, r)
+		if err != nil {
+			return fmt.Errorf("unable to create UploadGZIPZeroMemory request: %w", err)
 
-			fname := path.Base(cfg.DownloadURL.Path)
-			req, err := request.UploadGZIP(cfg.UploadURL.String(), fname, tr)
-			if err != nil {
-				err = fmt.Errorf("unable to create UploadGZIP request : %w", err)
-				return
-			}
+		}
 
-			_, err = c.Do(req)
-			if err != nil {
-				err = fmt.Errorf("upload do failed: %w", err)
-				return
-			}
-			log.Debugf("upload has finished successfuly: %s", cfg.UploadURL)
-		}()
-		r = pipeR
+		_, err = c.Do(req)
+		if err != nil {
+			return fmt.Errorf("upload Do failed: %w", err)
+
+		}
 	}
 
 	if _, err := io.Copy(cfg.Std, r); err != nil {
