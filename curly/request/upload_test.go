@@ -126,26 +126,32 @@ func BenchServer(b *testing.B) *httptest.Server {
 	}))
 }
 
-const lrSize = 1024 * 1024 * 60
+const lrSize = 1024 * 1024
 
 func BenchmarkUploadAlloc(b *testing.B) {
 	ts := BenchServer(b)
 	defer ts.Close()
 
 	c := &http.Client{Timeout: 10 * time.Second}
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	lr := io.LimitReader(r, lrSize)
-	req, err := UploadGZIP(ts.URL, "some-name", lr)
-	assert.NoError(b, err)
 
-	resp, err := c.Do(req)
-	assert.NoError(b, err)
+	for i := 0; i < b.N; i++ {
 
-	n, err := io.Copy(io.Discard, resp.Body)
-	resp.Body.Close()
-	assert.NoError(b, err)
-	// gzip includes some metadata so it is slightly larget than original writer size
-	assert.True(b, lrSize < n)
+		r := rand.New(rand.NewSource(time.Now().UnixNano()))
+		lr := io.LimitReader(r, lrSize)
+
+		req, err := UploadGZIP(ts.URL, "some-name", lr)
+		assert.NoError(b, err)
+
+		resp, err := c.Do(req)
+		assert.NoError(b, err)
+
+		n, err := io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		assert.NoError(b, err)
+		// gzip includes some metadata so it is slightly larget than original writer size
+		assert.True(b, lrSize < n)
+	}
+
 }
 
 func BenchmarkUploadAllocZeroMemory(b *testing.B) {
@@ -153,17 +159,21 @@ func BenchmarkUploadAllocZeroMemory(b *testing.B) {
 	defer ts.Close()
 
 	c := &http.Client{Timeout: 10 * time.Second}
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	lr := io.LimitReader(r, lrSize)
-	req, err := UploadGZIPZeroMemory(ts.URL, "some-name", lr)
-	assert.NoError(b, err)
 
-	resp, err := c.Do(req)
-	assert.NoError(b, err)
+	for i := 0; i < b.N; i++ {
+		r := rand.New(rand.NewSource(time.Now().UnixNano()))
+		lr := io.LimitReader(r, lrSize)
 
-	n, err := io.Copy(io.Discard, resp.Body)
-	resp.Body.Close()
-	assert.NoError(b, err)
-	// gzip includes some metadata so it is slightly larget than original writer size
-	assert.True(b, lrSize < n)
+		req, err := UploadGZIPZeroMemory(ts.URL, "some-name", lr)
+		assert.NoError(b, err)
+
+		resp, err := c.Do(req)
+		assert.NoError(b, err)
+
+		n, err := io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		assert.NoError(b, err)
+		// gzip includes some metadata so it is slightly larget than original writer size
+		assert.True(b, lrSize < n)
+	}
 }
