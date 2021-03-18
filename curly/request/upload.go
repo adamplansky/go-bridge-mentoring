@@ -37,11 +37,11 @@ func UploadGZIP(uploadURL string, filename string, r io.Reader) (*http.Request, 
 		return nil, fmt.Errorf("create form file: %w", err)
 	}
 	gzipW := gzip.NewWriter(part)
+
 	_, err = io.Copy(gzipW, r)
 	if err != nil {
 		return nil, fmt.Errorf("upload io.copy: %w", err)
 	}
-
 	gzipW.Close()
 	writer.Close()
 
@@ -54,20 +54,12 @@ func UploadGZIPZeroMemory(uploadURL string, filename string, r io.Reader) (*http
 	gzfilename := fmt.Sprintf("%s.gz", filename)
 
 	go func() {
-		var err error
-		defer func() {
-			if err != nil {
-				_ = pipeW.CloseWithError(err)
-			} else {
-				_ = pipeW.Close()
-			}
-		}()
-
 		defer pipeW.Close()
 		defer writer.Close()
 		part, err := writer.CreateFormFile("file", gzfilename)
 		if err != nil {
 			err = fmt.Errorf("create form file: %w", err)
+			pipeW.CloseWithError(err)
 			return
 		}
 		gzipW := gzip.NewWriter(part)
@@ -75,7 +67,7 @@ func UploadGZIPZeroMemory(uploadURL string, filename string, r io.Reader) (*http
 		_, err = io.Copy(gzipW, r)
 		if err != nil {
 			err = fmt.Errorf("UploadGZIPZeroMemory io.copy: %w", err)
-			return
+			pipeW.CloseWithError(err)
 		}
 	}()
 

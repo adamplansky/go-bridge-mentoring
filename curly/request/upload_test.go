@@ -110,22 +110,23 @@ func TestUploadGZIPZeroMemory(t *testing.T) {
 
 func BenchServer(b *testing.B) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		err := r.ParseMultipartForm(1024) // limit your max input length!
+		err := r.ParseMultipartForm(1024 * 1024) // limit your max input length!
 		assert.NoError(b, err)
 
 		file, _, err := r.FormFile("file")
 		assert.NoError(b, err)
+		defer file.Close()
 
 		//name := strings.Split(header.Filename, ".")
 		//fmt.Printf("File name %s\n", name[0])
 
 		_, err = io.Copy(w, file)
 		assert.NoError(b, err)
-		file.Close()
+
 	}))
 }
 
-const lrSize = 1024 * 1024 * 100
+const lrSize = 1024 * 1024 * 60
 
 func BenchmarkUploadAlloc(b *testing.B) {
 	ts := BenchServer(b)
