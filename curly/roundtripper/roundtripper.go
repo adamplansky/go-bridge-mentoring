@@ -1,6 +1,7 @@
 package roundtripper
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httputil"
 )
@@ -25,18 +26,18 @@ func (dt *debugTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 
 	b, err := httputil.DumpRequest(r, false)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to dump rt request: %w", err)
 	}
 
 	dt.l.Debugf("request: %v", string(b))
 
 	resp, err := dt.rt.RoundTrip(r)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to RoundTrip rt: %w", err)
 	}
 	b, err = httputil.DumpResponse(resp, false)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to dump rt response: %w", err)
 	}
 	dt.l.Debugf("response: %v", string(b))
 

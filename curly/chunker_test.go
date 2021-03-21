@@ -2,9 +2,10 @@ package main
 
 import (
 	"bytes"
+	"testing"
+
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 var _ Chunker = &testChunked{}
@@ -93,6 +94,7 @@ func TestChunked_Write(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tChunker := NewTestChunked()
+			defer tChunker.Close()
 			c := NewChunked(tChunker, tt.maxSize)
 
 			for _, p := range tt.input {
