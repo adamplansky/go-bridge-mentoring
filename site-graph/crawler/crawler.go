@@ -2,6 +2,7 @@ package crawler
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -45,13 +46,24 @@ const (
 )
 
 type Node struct {
-	ID string `json:"id"`
+	ID    url.URL `json:"id"`
+	Group int     `json:"group"`
+}
+
+func (n Node) MarshalJSON() ([]byte, error) {
+	return json.Marshal(&struct {
+		ID    string `json:"id"`
+		Group int    `json:"group"`
+	}{
+		ID:    n.ID.Host,
+		Group: n.Group,
+	})
 }
 
 type Graph struct {
 	queueNode map[url.URL]Status
-	Nodes     []Node
-	Edges     []Edge
+	Nodes     []Node `json:"nodes"`
+	Edges     []Edge `json:"links"`
 }
 
 func (g *Graph) IsCompleted(websiteURL url.URL) bool {
@@ -67,14 +79,14 @@ func (g *Graph) IsQuoted(websiteURL url.URL) bool {
 }
 
 func (g *Graph) AddNode(websiteURL url.URL) {
-	wURL := websiteURL.String()
 	for _, n := range g.Nodes {
-		if n.ID == wURL {
+		if n.ID == websiteURL {
 			return
 		}
 	}
 	g.Nodes = append(g.Nodes, Node{
-		ID: wURL,
+		ID:    websiteURL,
+		Group: 1,
 	})
 }
 
@@ -103,6 +115,7 @@ func (g *Graph) ScrapeRec(ctx context.Context, sourceURL url.URL, depth int, max
 			Source: sourceURL,
 			Target: target.href,
 			Type:   "link",
+			Value:  1,
 		})
 
 		// Add sourceURL / targetURL
@@ -124,10 +137,25 @@ type Edge struct {
 	Source url.URL
 	Target url.URL
 	Type   string
+	Value  int
 }
 
-func (e Edge) String() string {
+func (e *Edge) String() string {
 	return fmt.Sprintf("%v -> %v, type: %v\n", e.Source.String(), e.Target.String(), e.Type)
+}
+
+func (e *Edge) MarshalJSON() ([]byte, error) {
+	return json.Marshal(&struct {
+		Source string `json:"source"`
+		Target string `json:"target"`
+		Type   string `json:"type"`
+		Value  int    `json:"value"`
+	}{
+		Source: e.Source.Host,
+		Target: e.Target.Host,
+		Type:   e.Type,
+		Value:  e.Value,
+	})
 }
 
 type link struct {

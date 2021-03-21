@@ -65,8 +65,13 @@
 
 
     function drawSVG(data) {
+        console.log("1")
+        console.log(data)
         const links = data.links.map(d => Object.create(d));
         const nodes = data.nodes.map(d => Object.create(d));
+
+        console.log(links)
+        console.log(nodes)
 
         const simulation = d3.forceSimulation(nodes)
             .force("link", d3.forceLink(links).id(d => d.id))
@@ -137,30 +142,48 @@
         return svg.node()
     };
 
+    function basicAuth(user, password)
+    {
+        var token = user + ":" + password;
+
+        // Should i be encoding this value????? does it matter???
+        // Base64 Encoding -> btoa
+        var hash = btoa(token);
+
+        return "Basic " + hash;
+    }
+
 
     function load(form) {
         document.querySelector('#container').innerHTML = ''
-        query = new URLSearchParams(new FormData(form.url,form.depth)).toString()
-        fetch(URL + 'v1/graph' + query)
+        query = new URLSearchParams(new FormData(form)).toString()
+        fullURL = URL + 'v1/graph?' + query
+        console.log(fullURL)
+        options = {
+            headers: {
+                Authorization: basicAuth("gobridge", "secret")
+            }
+        }
+        fetch(fullURL, options)
             .then(response => response.json())
             .then(data => {
+                console.log("----------")
                 console.log(data)
+                console.log("----------")
                 document
                     .querySelector('#container')
                     .append(drawSVG(data))
             });
-        this.url.value = '';
-        this.depth.value = '';
+        // this.url.value = '';
+        // this.depth.value = '';
     }
 </script>
 
 <div id="content">
     <div>
         <form id="urlsubmit" action="#" onsubmit="load(this); return false">
-            <input type="text" name="username" placeholder="username">
-            <input type="text" name="password" placeholder="password">
-            <input type="text" name="url" placeholder="URL">
-            <input type="text" name="depth" placeholder="Depth">
+            <input type="text" name="url" placeholder="URL" value="https://www.adamplansky.cz/">
+            <input type="text" name="depth" placeholder="Depth" value="2">
             <input type="submit">
         </form>
     </div>
