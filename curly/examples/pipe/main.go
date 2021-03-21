@@ -8,6 +8,8 @@ import (
 )
 
 func main() {
+
+	// pipe writer to reader
 	r, w := io.Pipe()
 	_, _ = r, w
 	go func() {
