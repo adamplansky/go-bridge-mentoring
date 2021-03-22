@@ -14,7 +14,7 @@
 <body>
 <script>
 
-    const URL = "http://localhost:8080/";
+
 
     const types = [
         "licensing", "suit", "resolved"
@@ -156,8 +156,9 @@
 
     function load(form) {
         document.querySelector('#container').innerHTML = ''
-        query = new URLSearchParams(new FormData(form)).toString()
-        fullURL = URL + 'v1/graph?' + query
+        const cURL = "http://localhost:8080/";
+        let query = new URLSearchParams(new FormData(form)).toString()
+        let fullURL = cURL + 'v1/graph?' + query
         console.log(fullURL)
         options = {
             headers: {
