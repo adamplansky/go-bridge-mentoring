@@ -6,15 +6,22 @@ import (
 	"os"
 	"os/signal"
 
+	"go.uber.org/zap"
+
 	"github.com/adamplansky/go-bridge-mentoring/site-graph/http"
 )
 
 func main() {
-	ctx := context.Background()
-	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt)
+	logger, _ := zap.NewDevelopment()
+	log := logger.Sugar()
+	defer logger.Sync() // flushes buffer, if any
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
-	h := http.Router()
+	server := http.NewServer(log)
 	fmt.Println("I'm alive :8080")
-	http.ServeHTTP(ctx, ":8080", h)
+	if err := server.Run(ctx, ":8080"); err != nil {
+		log.Fatal(err)
+	}
 }

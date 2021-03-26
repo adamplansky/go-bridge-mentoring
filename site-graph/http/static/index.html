@@ -14,7 +14,7 @@
 <body>
 <script>
 
-
+    const backendURL = "http://localhost:8080/";
 
     const types = [
         "licensing", "suit", "resolved"
@@ -65,13 +65,8 @@
 
 
     function drawSVG(data) {
-        console.log("1")
-        console.log(data)
         const links = data.links.map(d => Object.create(d));
         const nodes = data.nodes.map(d => Object.create(d));
-
-        console.log(links)
-        console.log(nodes)
 
         const simulation = d3.forceSimulation(nodes)
             .force("link", d3.forceLink(links).id(d => d.id))
@@ -156,27 +151,21 @@
 
     function load(form) {
         document.querySelector('#container').innerHTML = ''
-        const cURL = "http://localhost:8080/";
+
         let query = new URLSearchParams(new FormData(form)).toString()
-        let fullURL = cURL + 'v1/graph?' + query
-        console.log(fullURL)
-        options = {
+        const fullURL = backendURL + 'v1/graph?' + query
+        const options = {
             headers: {
                 Authorization: basicAuth("gobridge", "secret")
             }
-        }
+        };
         fetch(fullURL, options)
             .then(response => response.json())
             .then(data => {
-                console.log("----------")
-                console.log(data)
-                console.log("----------")
                 document
                     .querySelector('#container')
                     .append(drawSVG(data))
             });
-        // this.url.value = '';
-        // this.depth.value = '';
     }
 </script>
 

@@ -15,21 +15,15 @@ type MyError struct {
 	Message    string `json:"message"`
 }
 
-func HttpError(w http.ResponseWriter, code int, err error) error {
+func httpErr(w http.ResponseWriter, code int, err error) {
 	e := &MyError{
 		HTTPStatus: code,
 		Message:    err.Error(),
 	}
 
-	b, err := json.Marshal(e)
+	err = json.NewEncoder(w).Encode(e)
 	if err != nil {
-		return err
+		http.Error(w, err.Error(), 500)
+		return
 	}
-
-	w.WriteHeader(e.HTTPStatus)
-	_, err = w.Write(b)
-	if err != nil {
-		return err
-	}
-	return nil
 }

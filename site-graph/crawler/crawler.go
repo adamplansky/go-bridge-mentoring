@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
+
+	"go.uber.org/zap"
 
 	"github.com/PuerkitoBio/goquery"
 	"go.uber.org/multierr"
@@ -16,11 +17,22 @@ import (
 
 //var ErrQueueEmpty = errors.New("queue is empty")
 
-func Scrape(ctx context.Context, websiteURL url.URL, maxDepth int) (*Graph, error) {
+type Crawler struct {
+	log *zap.SugaredLogger
+}
+
+func New(log *zap.SugaredLogger) *Crawler {
+	return &Crawler{
+		log: log,
+	}
+}
+
+func (c *Crawler) Scrape(ctx context.Context, websiteURL url.URL, maxDepth int) (*Graph, error) {
 	g := Graph{
 		queueNode: make(map[url.URL]Status),
 		Nodes:     make([]Node, 0),
 		Edges:     make([]Edge, 0),
+		log:       c.log,
 	}
 
 	err := g.ScrapeRec(ctx, websiteURL, 0, maxDepth)
@@ -45,12 +57,14 @@ const (
 	Failed
 )
 
+var _ json.Marshaler = &Node{}
+
 type Node struct {
 	ID    url.URL `json:"id"`
 	Group int     `json:"group"`
 }
 
-func (n Node) MarshalJSON() ([]byte, error) {
+func (n *Node) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&struct {
 		ID    string `json:"id"`
 		Group int    `json:"group"`
@@ -64,6 +78,7 @@ type Graph struct {
 	queueNode map[url.URL]Status
 	Nodes     []Node `json:"nodes"`
 	Edges     []Edge `json:"links"`
+	log       *zap.SugaredLogger
 }
 
 func (g *Graph) IsCompleted(websiteURL url.URL) bool {
@@ -95,7 +110,10 @@ func (g *Graph) ScrapeRec(ctx context.Context, sourceURL url.URL, depth int, max
 		return nil
 	}
 
-	links, _ := ParseWebsite(ctx, sourceURL)
+	links, err := ParseWebsite(ctx, sourceURL)
+	if err != nil {
+		return err
+	}
 	for _, target := range links {
 		if target.IsZero() {
 			continue
@@ -110,7 +128,7 @@ func (g *Graph) ScrapeRec(ctx context.Context, sourceURL url.URL, depth int, max
 			continue
 		}
 
-		fmt.Println(depth, strings.TrimSpace(target.name), target.href.String())
+		//fmt.Println(depth, strings.TrimSpace(target.name), target.href.String())
 		g.Edges = append(g.Edges, Edge{
 			Source: sourceURL,
 			Target: target.href,
@@ -124,12 +142,17 @@ func (g *Graph) ScrapeRec(ctx context.Context, sourceURL url.URL, depth int, max
 
 		g.queueNode[target.href] = InProgress
 		if err := g.ScrapeRec(ctx, target.href, depth+1, maxDepth); err != nil {
-			return err
+			g.log.Error("website scraping failed",
+				zap.Error(err),
+				zap.String("website", target.href.String()),
+			)
+			// if error occurs continue scraping
+			continue
 		}
 
 	}
 
-	fmt.Println("source URL: ", sourceURL)
+	//fmt.Println("source URL: ", sourceURL)
 	return nil
 }
 
@@ -173,8 +196,6 @@ func ParseWebsite(ctx context.Context, websiteURL url.URL) ([]link, error) {
 	c := &http.Client{
 		Timeout: 10 * time.Second,
 	}
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, websiteURL.String(), nil)
 	if err != nil {

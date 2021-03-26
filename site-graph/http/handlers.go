@@ -6,30 +6,17 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-
-	"github.com/adamplansky/go-bridge-mentoring/site-graph/crawler"
 )
 
-type ScrapeParams struct {
+type scrapeParams struct {
 	Depth int
 	URL   *url.URL
 }
 
-func (p ScrapeParams) Validate() error {
-	if p.Depth == 0 {
-		return fmt.Errorf("invalid depth in query param")
-	}
-	if p.URL == nil {
-		return fmt.Errorf("invalid url in query param")
-	}
-
-	return nil
-}
-
-func parseScrapeParams(q url.Values) (*ScrapeParams, error) {
-	var params ScrapeParams
+func parseScrapeParams(q url.Values) (*scrapeParams, error) {
+	var params scrapeParams
 	if q.Get("depth") != "" {
-		depth, err := strconv.ParseInt(q.Get("depth"), 10, 64)
+		depth, err := strconv.Atoi(q.Get("depth"))
 		if err != nil {
 			return nil, fmt.Errorf("invalid depth in query: %w", err)
 		}
@@ -43,35 +30,26 @@ func parseScrapeParams(q url.Values) (*ScrapeParams, error) {
 		}
 		params.URL = URL
 	}
-	if err := params.Validate(); err != nil {
-		return nil, err
-	}
-
 	return &params, nil
 }
 
-func ScrapeHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
+func (s *server) ScrapeHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 
-		params, err := parseScrapeParams(r.URL.Query())
-		if err != nil {
-			_ = HttpError(w, 400, err)
-			return
-		}
-		g, err := crawler.Scrape(ctx, *params.URL, params.Depth)
-		if err != nil {
-			_ = HttpError(w, 500, err)
-			return
-		}
+	params, err := parseScrapeParams(r.URL.Query())
+	if err != nil {
+		httpErr(w, 400, err)
+		return
+	}
+	g, err := s.crawler.Scrape(ctx, *params.URL, params.Depth)
+	if err != nil {
+		httpErr(w, 500, err)
+		return
+	}
 
-		b, err := json.Marshal(g)
-		if err != nil {
-			_ = HttpError(w, 500, err)
-			return
-		}
-
-		w.Write(b)
-
+	err = json.NewEncoder(w).Encode(g)
+	if err != nil {
+		httpErr(w, 500, err)
+		return
 	}
 }
