@@ -36,8 +36,8 @@ func (s *server) Run(ctx context.Context, addr string) error {
 	httpServer := http.Server{
 		Addr:           addr,
 		Handler:        s.router,
-		ReadTimeout:    5 * time.Second,            // the maximum duration for reading the entire request, including the body
-		WriteTimeout:   5 * time.Second,            // the maximum duration before timing out writes of the response
+		ReadTimeout:    15 * time.Second,           // the maximum duration for reading the entire request, including the body
+		WriteTimeout:   15 * time.Second,           // the maximum duration before timing out writes of the response
 		IdleTimeout:    30 * time.Second,           // the maximum amount of time to wait for the next request when keep-alive is enabled
 		MaxHeaderBytes: http.DefaultMaxHeaderBytes, // 1 MB
 		BaseContext: func(_ net.Listener) context.Context {

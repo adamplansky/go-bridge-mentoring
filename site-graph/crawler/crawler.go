@@ -66,17 +66,14 @@ const (
 var _ json.Marshaler = &Node{}
 
 type Node struct {
-	ID    url.URL `json:"id"`
-	Group int     `json:"group"`
+	ID url.URL `json:"id"`
 }
 
 func (n *Node) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&struct {
-		ID    string `json:"id"`
-		Group int    `json:"group"`
+		ID string `json:"id"`
 	}{
-		ID:    n.ID.Host,
-		Group: n.Group,
+		ID: n.ID.Host,
 	})
 }
 
@@ -126,10 +123,7 @@ func (g *Graph) AddNode(websiteURL url.URL) {
 			return
 		}
 	}
-	g.Nodes = append(g.Nodes, Node{
-		ID:    websiteURL,
-		Group: 1,
-	})
+	g.Nodes = append(g.Nodes, Node{ID: websiteURL})
 }
 
 func (g *Graph) ScrapeRec(ctx context.Context, sourceURL url.URL, depth int, maxDepth int) error {
@@ -167,7 +161,6 @@ func (g *Graph) ScrapeRec(ctx context.Context, sourceURL url.URL, depth int, max
 				Source: sourceURL,
 				Target: target.href,
 				Type:   "link",
-				Value:  1,
 			})
 			g.mu.Unlock()
 
@@ -197,7 +190,6 @@ type Edge struct {
 	Source url.URL
 	Target url.URL
 	Type   string
-	Value  int
 }
 
 func (e *Edge) String() string {
@@ -209,12 +201,10 @@ func (e *Edge) MarshalJSON() ([]byte, error) {
 		Source string `json:"source"`
 		Target string `json:"target"`
 		Type   string `json:"type"`
-		Value  int    `json:"value"`
 	}{
 		Source: e.Source.Host,
 		Target: e.Target.Host,
 		Type:   e.Type,
-		Value:  e.Value,
 	})
 }
 

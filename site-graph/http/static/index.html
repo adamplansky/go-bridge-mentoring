@@ -9,6 +9,14 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/6.6.0/d3.min.js"
             integrity="sha512-XgjkLS0sSzUq88GniFcrLy6zjgVWkBoRFziaLm1Z+gVgkHuO3ieikhD/Q6eNKXAsp88yvBFS0n6ovVlabXftIg=="
             crossorigin="anonymous"></script>
+
+    <style>
+        #container {
+            background-color: linen;
+
+        }
+
+    </style>
 </head>
 
 <body>
@@ -18,13 +26,6 @@
         "licensing", "suit", "resolved"
     ];
 
-    function linkArc(d) {
-        const r = Math.hypot(d.target.x - d.source.x, d.target.y - d.source.y);
-        return `
-        M${d.source.x},${d.source.y}
-        A${r},${r} 0 0,1 ${d.target.x},${d.target.y}
-      `;
-    }
 
     function linkArc(d) {
         const r = Math.hypot(d.target.x - d.source.x, d.target.y - d.source.y);
@@ -77,6 +78,7 @@
             .attr("viewBox", [-width / 2, -height / 2, width, height])
             .classed("svg-content", true)
             .style("font", "8px sans-serif");
+
 
 
         // d3.create("svg")
@@ -166,12 +168,6 @@
                 const statusCode = document.getElementById('statuscode');
                 statusCode.innerText = "response status: " + response.statusText;
 
-                var myHeaders = response.headers;
-                console.log(myHeaders)
-                console.log("content-length:", response.headers.get("content-length"))
-                console.log("content-encoding:", response.headers.get("content-encoding"))
-                response.headers.forEach(console.log);
-
                 for (let entry of response.headers.entries()) {
                     console.log(entry);
                 }
@@ -183,10 +179,10 @@
                     }
                 )
             }).then((data) => {
-            var end = window.performance.now();
-            var time = end - start;
+            const end = window.performance.now();
+            const time = end - start;
             const timeDiv = document.getElementById('time');
-            timeDiv.innerText = "request time: " +time.toString() + " ms";
+            timeDiv.innerText = "request time: " + time.toString() + " ms";
 
         });
 
