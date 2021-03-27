@@ -13,5 +13,6 @@ func (s *server) routes() {
 	// v1 must contain basic auth
 	sr := s.router.PathPrefix("/v1").Subrouter()
 	sr.Use(s.authMiddleware)
+	sr.Use(s.gzipHandler)
 	sr.HandleFunc("/graph", s.ScrapeHandler).Methods(http.MethodGet)
 }

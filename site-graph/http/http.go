@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/adamplansky/go-bridge-mentoring/site-graph/cache"
+
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 
@@ -16,13 +18,15 @@ type server struct {
 	router  *mux.Router
 	log     *zap.SugaredLogger
 	crawler *crawler.Crawler
+	cache   cache.Cache
 }
 
-func NewServer(log *zap.SugaredLogger) *server {
+func NewServer(log *zap.SugaredLogger, c cache.Cache) *server {
 	s := server{
 		router:  mux.NewRouter(),
 		log:     log,
-		crawler: crawler.New(log),
+		crawler: crawler.New(log, c),
+		cache:   c,
 	}
 	s.routes()
 	return &s
@@ -30,21 +34,15 @@ func NewServer(log *zap.SugaredLogger) *server {
 
 func (s *server) Run(ctx context.Context, addr string) error {
 	httpServer := http.Server{
-		Addr:              addr,
-		Handler:           s.router,
-		TLSConfig:         nil,
-		ReadTimeout:       0,
-		ReadHeaderTimeout: 0,
-		WriteTimeout:      0,
-		IdleTimeout:       0,
-		MaxHeaderBytes:    0,
-		TLSNextProto:      nil,
-		ConnState:         nil,
-		ErrorLog:          nil,
+		Addr:           addr,
+		Handler:        s.router,
+		ReadTimeout:    5 * time.Second,            // the maximum duration for reading the entire request, including the body
+		WriteTimeout:   5 * time.Second,            // the maximum duration before timing out writes of the response
+		IdleTimeout:    30 * time.Second,           // the maximum amount of time to wait for the next request when keep-alive is enabled
+		MaxHeaderBytes: http.DefaultMaxHeaderBytes, // 1 MB
 		BaseContext: func(_ net.Listener) context.Context {
 			return ctx
 		},
-		ConnContext: nil,
 	}
 	go func() {
 		if err := httpServer.ListenAndServe(); err != http.ErrServerClosed {

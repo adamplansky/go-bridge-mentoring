@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+
+	"go.uber.org/zap"
 )
 
 type scrapeParams struct {
@@ -38,18 +40,32 @@ func (s *server) ScrapeHandler(w http.ResponseWriter, r *http.Request) {
 
 	params, err := parseScrapeParams(r.URL.Query())
 	if err != nil {
-		httpErr(w, 400, err)
+		s.httpErr(w, 400, err)
 		return
 	}
 	g, err := s.crawler.Scrape(ctx, *params.URL, params.Depth)
 	if err != nil {
-		httpErr(w, 500, err)
+		s.httpErr(w, 500, err)
 		return
 	}
 
-	err = json.NewEncoder(w).Encode(g)
+	if len(g.Nodes) == 0 {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	s.log.Debug("graph output", zap.Int("nodes_number", len(g.Nodes)))
+	fmt.Println()
+
+	s.resp(w, g)
+
+}
+
+func (s *server) resp(w http.ResponseWriter, v interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	err := json.NewEncoder(w).Encode(v)
 	if err != nil {
-		httpErr(w, 500, err)
+		s.httpErr(w, http.StatusInternalServerError, err)
 		return
 	}
 }

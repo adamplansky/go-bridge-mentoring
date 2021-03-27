@@ -14,8 +14,6 @@
 <body>
 <script>
 
-    const backendURL = "http://localhost:8080/";
-
     const types = [
         "licensing", "suit", "resolved"
     ];
@@ -137,8 +135,7 @@
         return svg.node()
     };
 
-    function basicAuth(user, password)
-    {
+    function basicAuth(user, password) {
         var token = user + ":" + password;
 
         // Should i be encoding this value????? does it matter???
@@ -148,36 +145,65 @@
         return "Basic " + hash;
     }
 
-
     function load(form) {
+        // async function load(form) {
         document.querySelector('#container').innerHTML = ''
 
         let query = new URLSearchParams(new FormData(form)).toString()
-        const fullURL = backendURL + 'v1/graph?' + query
+        // const fullURL = backendURL + 'v1/graph?' + query
+        const fullURL = 'v1/graph?' + query
         const options = {
             headers: {
-                Authorization: basicAuth("gobridge", "secret")
+                Authorization: basicAuth("gobridge", "secret"),
+                'Content-Type': 'application/json',
+                'Accept-Encoding': 'gzip'
             }
         };
+        var start = window.performance.now();
+        // cosnt response = await    fetch(fullURL, options)
         fetch(fullURL, options)
-            .then(response => response.json())
-            .then(data => {
-                document
-                    .querySelector('#container')
-                    .append(drawSVG(data))
-            });
+            .then(response => {
+                const statusCode = document.getElementById('statuscode');
+                statusCode.innerText = "response status: " + response.statusText;
+
+                var myHeaders = response.headers;
+                console.log(myHeaders)
+                console.log("content-length:", response.headers.get("content-length"))
+                console.log("content-encoding:", response.headers.get("content-encoding"))
+                response.headers.forEach(console.log);
+
+                for (let entry of response.headers.entries()) {
+                    console.log(entry);
+                }
+                response.json().then(
+                    data => {
+                        document
+                            .querySelector('#container')
+                            .append(drawSVG(data))
+                    }
+                )
+            }).then((data) => {
+            var end = window.performance.now();
+            var time = end - start;
+            const timeDiv = document.getElementById('time');
+            timeDiv.innerText = "request time: " +time.toString() + " ms";
+
+        });
+
     }
 </script>
 
 <div id="content">
     <div>
         <form id="urlsubmit" action="#" onsubmit="load(this); return false">
-            <input type="text" name="url" placeholder="URL" value="https://www.adamplansky.cz/">
+            <input type="text" name="url" placeholder="URL"
+                   value="https://www.adamplansky.cz/">
             <input type="text" name="depth" placeholder="Depth" value="2">
             <input type="submit">
         </form>
     </div>
-
+    <div id="statuscode"></div>
+    <div id="time"></div>
     <div id="container" class="svg-container"></div>
 </div>
 </body>

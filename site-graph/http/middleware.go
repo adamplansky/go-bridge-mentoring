@@ -1,10 +1,13 @@
 package http
 
 import (
+	"compress/gzip"
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 
 	"go.uber.org/zap"
 
@@ -45,24 +48,56 @@ func authenticate(username, password []byte) error {
 
 func (s *server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println(r.Header)
 		username, password, authOK := r.BasicAuth()
-		fmt.Println(username, password, authOK)
 		if authOK == false {
-			httpErr(w, 401, ErrUnauthorized)
+			s.httpErr(w, 401, ErrUnauthorized)
 			return
 		}
 
 		if err := authenticate([]byte(username), []byte(password)); err != nil {
 			if errors.Is(err, ErrUsernameOrPasswordInvalid) {
-				http.StatusText(http.StatusUnauthorized)
+				s.httpErr(w, http.StatusUnauthorized, nil)
 				return
 			}
 			s.log.Error("authenticate failed", zap.Error(err))
-			http.StatusText(http.StatusInternalServerError)
+			s.httpErr(w, http.StatusInternalServerError, nil)
 			return
 		}
 
 		next.ServeHTTP(w, r)
 	})
 }
+
+func (s *server) gzipHandler(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			h.ServeHTTP(w, r)
+			return
+		}
+		w.Header().Set("Content-Encoding", "gzip")
+		gz := gzip.NewWriter(w)
+		defer gz.Close()
+		h.ServeHTTP(gzipResponseWriter{Writer: gz, ResponseWriter: w}, r)
+	})
+}
+
+type gzipResponseWriter struct {
+	io.Writer
+	http.ResponseWriter
+}
+
+func (w gzipResponseWriter) Write(b []byte) (int, error) {
+	return w.Writer.Write(b)
+}
+
+//
+//func (s *server) gzipMiddleware(next http.Handler) http.Handler {
+//	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+//		w.Header().Set("Content-Encoding", "gzip")
+//		gz := gzip.NewWriter(w)
+//		defer gz.Close()
+//		gzw := gzipResponseWriter{Writer: gz, ResponseWriter: w}
+//
+//		next.ServeHTTP(gzw, r)
+//	})
+//}
