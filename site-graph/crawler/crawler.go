@@ -2,14 +2,11 @@ package crawler
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
 	"sync"
 	"time"
-
-	"github.com/adamplansky/go-bridge-mentoring/site-graph/cache"
 
 	"go.uber.org/zap"
 
@@ -18,120 +15,49 @@ import (
 	"golang.org/x/net/html"
 )
 
-//var ErrQueueEmpty = errors.New("queue is empty")
+type Cache interface {
+	// Add insert new key-value into cache, if key already exists
+	// in cache returns evicted=true
+	Add(key string, value interface{})
+	// Get gets value from the coresponding key from cache
+	// ok == true if object exist in cache, otherwire ok == false
+	Get(key string) (value interface{}, ok bool)
+}
 
 type Crawler struct {
 	log   *zap.SugaredLogger
-	cache cache.Cache
+	cache Cache
+	graph *Graph
 }
 
-func New(log *zap.SugaredLogger, c cache.Cache) *Crawler {
+func New(log *zap.SugaredLogger, c Cache) *Crawler {
 	return &Crawler{
 		log:   log,
 		cache: c,
 	}
 }
 
-func (c *Crawler) Scrape(ctx context.Context, websiteURL url.URL, maxDepth int) (*Graph, error) {
-	g := Graph{
-		queueNode: make(map[url.URL]Status),
-		Nodes:     make([]Node, 0),
-		Edges:     make([]Edge, 0),
-		log:       c.log,
-		cache:     c.cache,
+func (c *Crawler) Scrape(ctx context.Context, URL url.URL, maxDepth int) (*Graph, error) {
+	c.graph = &Graph{
+		Nodes: make([]Node, 0),
+		Edges: make(map[Node][]Node, 0),
+		mu:    sync.RWMutex{},
 	}
 
-	err := g.ScrapeRec(ctx, websiteURL, 0, maxDepth)
+	err := c.ScrapeRec(ctx, URL, 0, maxDepth)
 	if err != nil {
 		return nil, err
 	}
 
-	//for _, edge := range g.Edges {
-	//	fmt.Println(edge)
-	//}
-
-	return &g, nil
+	return c.graph, nil
 }
 
-type Status int
-
-const (
-	None Status = iota
-	Quoted
-	InProgress
-	Completed
-	Failed
-)
-
-var _ json.Marshaler = &Node{}
-
-type Node struct {
-	ID url.URL `json:"id"`
-}
-
-func (n *Node) MarshalJSON() ([]byte, error) {
-	return json.Marshal(&struct {
-		ID string `json:"id"`
-	}{
-		ID: n.ID.Host,
-	})
-}
-
-type Graph struct {
-	queueNode map[url.URL]Status
-	Nodes     []Node `json:"nodes"`
-	Edges     []Edge `json:"links"`
-	log       *zap.SugaredLogger
-	cache     cache.Cache
-	mu        sync.RWMutex
-}
-
-func (g *Graph) nodeStatus(websiteURL url.URL) Status {
-	g.mu.RLock()
-	status, ok := g.queueNode[websiteURL]
-	g.mu.RUnlock()
-	if !ok {
-		return None
-	}
-	return status
-}
-
-func (g *Graph) setNodeStatus(websiteURL url.URL, status Status) {
-	g.mu.Lock()
-	g.queueNode[websiteURL] = status
-	g.mu.Unlock()
-}
-
-func (g *Graph) IsCompleted(websiteURL url.URL) bool {
-	return g.nodeStatus(websiteURL) == Completed
-}
-
-func (g *Graph) IsInProgress(websiteURL url.URL) bool {
-	return g.nodeStatus(websiteURL) == InProgress
-}
-
-// FIXME(aplansky) None should probably handled better
-func (g *Graph) IsQuoted(websiteURL url.URL) bool {
-	return g.nodeStatus(websiteURL) == Quoted || g.nodeStatus(websiteURL) == None
-}
-
-func (g *Graph) AddNode(websiteURL url.URL) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	for _, n := range g.Nodes {
-		if n.ID == websiteURL {
-			return
-		}
-	}
-	g.Nodes = append(g.Nodes, Node{ID: websiteURL})
-}
-
-func (g *Graph) ScrapeRec(ctx context.Context, sourceURL url.URL, depth int, maxDepth int) error {
+func (c *Crawler) ScrapeRec(ctx context.Context, sourceURL url.URL, depth int, maxDepth int) error {
 	if depth == maxDepth {
 		return nil
 	}
 
-	links, err := g.ParseWebsite(ctx, sourceURL)
+	links, err := c.ParseWebsite(ctx, sourceURL)
 	if err != nil {
 		return err
 	}
@@ -141,91 +67,37 @@ func (g *Graph) ScrapeRec(ctx context.Context, sourceURL url.URL, depth int, max
 		wg.Add(1)
 		go func(target link) {
 			defer wg.Done()
-			//g.log.Debug("targets: ", target)
 
 			if target.IsZero() {
 				return
 			}
-			// do not traverse all subpages - only host
-			// maybe it will be extended in the future
-			target.href.Path = ""
-			target.href.RawQuery = ""
 
-			// if URL is already parsed skip it
-			if !g.IsQuoted(target.href) {
-				return
-			}
-			g.mu.Lock()
-			//fmt.Println(depth, strings.TrimSpace(target.name), target.href.String())
-			g.Edges = append(g.Edges, Edge{
-				Source: sourceURL,
-				Target: target.href,
-				Type:   "link",
-			})
-			g.mu.Unlock()
+			c.graph.AddEdge(sourceURL, target.URL())
 
-			g.AddNode(sourceURL)
-			g.AddNode(target.href)
-			g.setNodeStatus(target.href, InProgress)
+			fmt.Println("scraping: ", target.URL())
 
-			//g.log.Debug("ScrapeRec: ", target.href)
-			if err := g.ScrapeRec(ctx, target.href, depth+1, maxDepth); err != nil {
-				g.log.Error("website scraping failed",
+			if err := c.ScrapeRec(ctx, target.URL(), depth+1, maxDepth); err != nil {
+				c.log.Error("website scraping failed",
 					zap.Error(err),
 					zap.String("website", target.href.String()),
 				)
-				// if error occurs continue scraping
-				return
 			}
-			return
 		}(target)
 	}
 	wg.Wait()
 
-	//fmt.Println("source URL: ", sourceURL)
 	return nil
-}
-
-type Edge struct {
-	Source url.URL
-	Target url.URL
-	Type   string
-}
-
-func (e *Edge) String() string {
-	return fmt.Sprintf("%v -> %v, type: %v\n", e.Source.String(), e.Target.String(), e.Type)
-}
-
-func (e *Edge) MarshalJSON() ([]byte, error) {
-	return json.Marshal(&struct {
-		Source string `json:"source"`
-		Target string `json:"target"`
-		Type   string `json:"type"`
-	}{
-		Source: e.Source.Host,
-		Target: e.Target.Host,
-		Type:   e.Type,
-	})
-}
-
-type link struct {
-	name string
-	href url.URL
-}
-
-func (l link) IsZero() bool {
-	return l.name == "" || l.href.Scheme == "" || l.href.Host == ""
 }
 
 // ParseWebsite parses html url and returns all <a href> elements and returns
 // its href values.
-func (g *Graph) ParseWebsite(ctx context.Context, websiteURL url.URL) ([]link, error) {
+func (c *Crawler) ParseWebsite(ctx context.Context, websiteURL url.URL) ([]link, error) {
 	webURL := websiteURL.String()
 	//g.log.Debug("downloading website",
 	//	zap.String("website", websiteURL.Host),
 	//)
 
-	if vals, ok := g.cache.Get(webURL); ok {
+	if vals, ok := c.cache.Get(webURL); ok {
 		links, ok := vals.([]link)
 		if !ok {
 			return nil, fmt.Errorf("unable to cast values from cache to []links: %s", webURL)
@@ -233,7 +105,7 @@ func (g *Graph) ParseWebsite(ctx context.Context, websiteURL url.URL) ([]link, e
 		return links, nil
 	}
 
-	c := &http.Client{
+	client := &http.Client{
 		Timeout: 5 * time.Second,
 	}
 
@@ -242,13 +114,13 @@ func (g *Graph) ParseWebsite(ctx context.Context, websiteURL url.URL) ([]link, e
 		return nil, err
 	}
 
-	res, err := c.Do(req)
+	res, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer res.Body.Close()
-	if res.StatusCode != 200 {
-		return nil, fmt.Errorf("status code error: %d %s", res.StatusCode, res.Status)
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("response is not http.StatusOK, got %s", res.Status)
 	}
 
 	// Load the HTML document
@@ -266,11 +138,26 @@ func (g *Graph) ParseWebsite(ctx context.Context, websiteURL url.URL) ([]link, e
 			errs = append(errs, err)
 			continue
 		}
+
 		links = append(links, l)
-		//fmt.Printf("%#v\n", l)
 	}
-	g.cache.Add(webURL, links)
+	c.cache.Add(webURL, links)
 	return links, multierr.Combine(errs...)
+}
+
+type link struct {
+	name string
+	href url.URL
+}
+
+func (l link) URL() url.URL {
+	l.href.Path = ""
+	l.href.RawQuery = ""
+	return l.href
+}
+
+func (l link) IsZero() bool {
+	return l.name == "" || l.href.Scheme == "" || l.href.Host == ""
 }
 
 // get link struct from <a href="url"></a> if url does not containt

@@ -15,23 +15,31 @@ type scrapeParams struct {
 	URL   *url.URL
 }
 
+// parseScrapeParams parse params from client. If depth in query is empty
+// it uses 1 as default parameter. Query parameter url is mandatory and returns
+// error if is not specified.
 func parseScrapeParams(q url.Values) (*scrapeParams, error) {
 	var params scrapeParams
-	if q.Get("depth") != "" {
-		depth, err := strconv.Atoi(q.Get("depth"))
+	if qDepth := q.Get("depth"); qDepth != "" {
+		depth, err := strconv.Atoi(qDepth)
 		if err != nil {
-			return nil, fmt.Errorf("invalid depth in query: %w", err)
+			return nil, fmt.Errorf("query parameter 'depth' is invalid: %w", err)
 		}
-		params.Depth = int(depth)
+		params.Depth = depth
+	} else {
+		params.Depth = 1
 	}
 
-	if q.Get("url") != "" {
-		URL, err := url.Parse(q.Get("url"))
+	if rawURL := q.Get("url"); rawURL != "" {
+		URL, err := url.Parse(rawURL)
 		if err != nil {
-			return nil, fmt.Errorf("invalid url in query: %w", err)
+			return nil, fmt.Errorf("query parameter 'url' is invalid: %w", err)
 		}
 		params.URL = URL
+	} else {
+		return nil, fmt.Errorf("query parameter 'url' is empty")
 	}
+
 	return &params, nil
 }
 
@@ -55,7 +63,6 @@ func (s *server) ScrapeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.log.Debug("graph output", zap.Int("nodes_number", len(g.Nodes)))
-	fmt.Println()
 
 	s.resp(w, g)
 

@@ -6,22 +6,29 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/adamplansky/go-bridge-mentoring/site-graph/cache"
-
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 
 	"github.com/adamplansky/go-bridge-mentoring/site-graph/crawler"
 )
 
+type Cache interface {
+	// Add insert new key-value into cache, if key already exists
+	// in cache returns evicted=true
+	Add(key string, value interface{})
+	// Get gets value from the coresponding key from cache
+	// ok == true if object exist in cache, otherwire ok == false
+	Get(key string) (value interface{}, ok bool)
+}
+
 type server struct {
 	router  *mux.Router
 	log     *zap.SugaredLogger
 	crawler *crawler.Crawler
-	cache   cache.Cache
+	cache   Cache
 }
 
-func NewServer(log *zap.SugaredLogger, c cache.Cache) *server {
+func NewServer(log *zap.SugaredLogger, c Cache) *server {
 	s := server{
 		router:  mux.NewRouter(),
 		log:     log,

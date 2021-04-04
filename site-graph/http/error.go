@@ -13,31 +13,26 @@ var (
 	ErrInternal     = fmt.Errorf("internal server error")
 )
 
-type MyError struct {
-	Message string `json:"message"`
-}
-
 // httpErr set status code and content-type into http header
 // if error != nil it also create unified http error message
 // and encode it into http.body
 func (s *server) httpErr(w http.ResponseWriter, code int, err error) {
+	type myError struct {
+		Message string `json:"message"`
+	}
+
 	w.WriteHeader(code)
 	w.Header().Set("Content-Type", "application/json")
 
 	if err != nil {
-		e := &MyError{Message: err.Error()}
-		err = json.NewEncoder(w).Encode(e)
-		if err == nil {
-			code = http.StatusInternalServerError
+		e := &myError{Message: err.Error()}
+		// forcing shadowing err
+		if err := json.NewEncoder(w).Encode(e); err != nil {
+			s.log.Error("internal server error", zap.Error(err))
+			http.Error(w, ErrInternal.Error(), 500)
+			return
 		}
-	}
-
-	// if status code ==  500 always return unified error message
-	if code == http.StatusInternalServerError {
-		s.log.Error("internal server error", zap.Error(err))
-		http.Error(w, ErrInternal.Error(), 500)
+		s.log.Warn("unable to process request", zap.Error(err))
 		return
 	}
-
-	s.log.Warn("unable to process request", zap.Error(err))
 }
