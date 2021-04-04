@@ -2,7 +2,6 @@ package crawler
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/url"
 	"sync"
 	"testing"
@@ -56,12 +55,6 @@ func TestGraph_AddEdge(t *testing.T) {
 			}
 			for _, edge := range tt.edges {
 				g.AddEdge(edge.src, edge.dst)
-			}
-
-			for src, dsts := range g.Edges {
-				for _, dst := range dsts {
-					fmt.Printf("%v -> %v\n", src.URL.Host, dst.URL.Host)
-				}
 			}
 
 			require.Empty(t, cmp.Diff(g.Edges, tt.wantEdges))

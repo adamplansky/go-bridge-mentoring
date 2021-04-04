@@ -74,8 +74,6 @@ func (c *Crawler) ScrapeRec(ctx context.Context, sourceURL url.URL, depth int, m
 
 			c.graph.AddEdge(sourceURL, target.URL())
 
-			fmt.Println("scraping: ", target.URL())
-
 			if err := c.ScrapeRec(ctx, target.URL(), depth+1, maxDepth); err != nil {
 				c.log.Error("website scraping failed",
 					zap.Error(err),

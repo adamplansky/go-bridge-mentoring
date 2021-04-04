@@ -14,12 +14,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-const (
-	// passwordDigst - hardcoded bcrypt password hash. password: "secret" in plaintext
-	dbPasswordDigst = "$2a$04$QqzenEKqI.CNHTMvH0dPkeQqhLptBURwJSPlKFD0xt1QaQPN/rz26"
-	dbUsername      = "gobridge"
-)
-
 var (
 	ErrUsernameOrPasswordInvalid = fmt.Errorf("username or password is invalid")
 )
@@ -27,22 +21,23 @@ var (
 // isAuthenticated return false if username or password
 // is not allowed to access application.
 func authenticate(username, password []byte) error {
+	var (
+		// passwordDigst - hardcoded bcrypt password hash. password: "secret" in plaintext
+		dbPasswordDigst = []byte("$2a$04$QqzenEKqI.CNHTMvH0dPkeQqhLptBURwJSPlKFD0xt1QaQPN/rz26")
+		dbUsername      = []byte("gobridge")
+	)
+
 	// ConstantTimeCompare returns 1 if the two slices, x and y, have equal contents
 	// and 0 otherwise. The time taken is a function of the length of the slices and
 	// is independent of the contents.
-	if subtle.ConstantTimeCompare(username, []byte(dbUsername)) == 0 {
+	if subtle.ConstantTimeCompare(username, dbUsername) == 0 {
 		return ErrUsernameOrPasswordInvalid
 	}
-	err := bcrypt.CompareHashAndPassword([]byte(dbPasswordDigst), password)
-	switch err {
-	case nil:
-		// password match
-		return nil
-	case bcrypt.ErrMismatchedHashAndPassword:
+	err := bcrypt.CompareHashAndPassword(dbPasswordDigst, password)
+	if err == bcrypt.ErrMismatchedHashAndPassword {
 		return ErrUsernameOrPasswordInvalid
-	default:
-		return err
 	}
+	return err
 
 }
 
@@ -50,13 +45,13 @@ func (s *server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		username, password, authOK := r.BasicAuth()
 		if authOK == false {
-			s.httpErr(w, 401, ErrUnauthorized)
+			s.httpErr(w, http.StatusUnauthorized, ErrUnauthorized)
 			return
 		}
 
 		if err := authenticate([]byte(username), []byte(password)); err != nil {
 			if errors.Is(err, ErrUsernameOrPasswordInvalid) {
-				s.httpErr(w, http.StatusUnauthorized, nil)
+				s.httpErr(w, http.StatusUnauthorized, err)
 				return
 			}
 			s.log.Error("authenticate failed", zap.Error(err))

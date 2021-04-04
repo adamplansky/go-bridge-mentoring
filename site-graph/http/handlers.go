@@ -48,12 +48,12 @@ func (s *server) ScrapeHandler(w http.ResponseWriter, r *http.Request) {
 
 	params, err := parseScrapeParams(r.URL.Query())
 	if err != nil {
-		s.httpErr(w, 400, err)
+		s.httpErr(w, http.StatusBadRequest, err)
 		return
 	}
 	g, err := s.crawler.Scrape(ctx, *params.URL, params.Depth)
 	if err != nil {
-		s.httpErr(w, 500, err)
+		s.httpErr(w, http.StatusInternalServerError, err)
 		return
 	}
 

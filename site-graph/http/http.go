@@ -2,7 +2,6 @@ package http
 
 import (
 	"context"
-	"net"
 	"net/http"
 	"time"
 
@@ -30,12 +29,11 @@ type server struct {
 
 func NewServer(log *zap.SugaredLogger, c Cache) *server {
 	s := server{
-		router:  mux.NewRouter(),
 		log:     log,
 		crawler: crawler.New(log, c),
 		cache:   c,
 	}
-	s.routes()
+	s.router = s.routes()
 	return &s
 }
 
@@ -47,13 +45,12 @@ func (s *server) Run(ctx context.Context, addr string) error {
 		WriteTimeout:   15 * time.Second,           // the maximum duration before timing out writes of the response
 		IdleTimeout:    30 * time.Second,           // the maximum amount of time to wait for the next request when keep-alive is enabled
 		MaxHeaderBytes: http.DefaultMaxHeaderBytes, // 1 MB
-		BaseContext: func(_ net.Listener) context.Context {
-			return ctx
-		},
 	}
 	go func() {
-		if err := httpServer.ListenAndServe(); err != http.ErrServerClosed {
-			s.log.Fatal("HTTP server ListenAndServe failed", zap.Error(err))
+		if err := httpServer.ListenAndServe(); err != nil {
+			if err != http.ErrServerClosed {
+				s.log.Fatal("HTTP server ListenAndServe failed", zap.Error(err))
+			}
 		}
 	}()
 	<-ctx.Done()
