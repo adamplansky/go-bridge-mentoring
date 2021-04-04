@@ -27,29 +27,30 @@ type Cache interface {
 type Crawler struct {
 	log   *zap.SugaredLogger
 	cache Cache
-	graph *Graph
+	Graph *Graph
 }
 
 func New(log *zap.SugaredLogger, c Cache) *Crawler {
-	return &Crawler{
-		log:   log,
-		cache: c,
-	}
-}
-
-func (c *Crawler) Scrape(ctx context.Context, URL url.URL, maxDepth int) (*Graph, error) {
-	c.graph = &Graph{
+	graph := &Graph{
 		Nodes: make([]Node, 0),
 		Edges: make(map[Node][]Node, 0),
 		mu:    sync.RWMutex{},
 	}
 
+	return &Crawler{
+		log:   log,
+		cache: c,
+		Graph: graph,
+	}
+}
+
+func (c *Crawler) Scrape(ctx context.Context, URL url.URL, maxDepth int) (*Graph, error) {
 	err := c.ScrapeRec(ctx, URL, 0, maxDepth)
 	if err != nil {
 		return nil, err
 	}
 
-	return c.graph, nil
+	return c.Graph, nil
 }
 
 func (c *Crawler) ScrapeRec(ctx context.Context, sourceURL url.URL, depth int, maxDepth int) error {
@@ -72,7 +73,7 @@ func (c *Crawler) ScrapeRec(ctx context.Context, sourceURL url.URL, depth int, m
 				return
 			}
 
-			c.graph.AddEdge(sourceURL, target.URL())
+			c.Graph.AddEdge(sourceURL, target.URL())
 
 			if err := c.ScrapeRec(ctx, target.URL(), depth+1, maxDepth); err != nil {
 				c.log.Error("website scraping failed",
@@ -87,9 +88,44 @@ func (c *Crawler) ScrapeRec(ctx context.Context, sourceURL url.URL, depth int, m
 	return nil
 }
 
+func (c *Crawler) ScrapeChan(ctx context.Context, jobs <-chan Job, results chan<- Job, errCh chan<- error, maxDepth int) {
+	for job := range jobs {
+		if job.Depth == maxDepth {
+			errCh <- nil
+			continue
+		}
+
+		job.URL.Path = ""
+		job.URL.RawQuery = ""
+
+		links, err := c.ParseWebsite(ctx, job.URL)
+		if err != nil {
+			errCh <- err
+			continue
+		}
+
+		for _, target := range links {
+			if target.IsZero() {
+				continue
+			}
+			c.Graph.AddEdge(job.URL, target.URL())
+			j := Job{
+				URL:   target.URL(),
+				Depth: job.Depth + 1,
+			}
+			select {
+			case results <- j:
+			case <-time.After(2 * time.Second):
+			}
+		}
+		errCh <- nil
+	}
+}
+
 // ParseWebsite parses html url and returns all <a href> elements and returns
 // its href values.
 func (c *Crawler) ParseWebsite(ctx context.Context, websiteURL url.URL) ([]link, error) {
+
 	webURL := websiteURL.String()
 	//g.log.Debug("downloading website",
 	//	zap.String("website", websiteURL.Host),
