@@ -2,7 +2,6 @@ package crawler
 
 import (
 	"context"
-	"fmt"
 	"net/url"
 
 	"go.uber.org/zap"
@@ -80,15 +79,4 @@ func (c *Collector) Work(ctx context.Context, URL url.URL, maxDepth int) *Graph 
 	close(errCh)
 
 	return c.crawler.Graph
-}
-
-var ErrEmptyQueue = fmt.Errorf("queue is empty")
-
-func (c *Collector) pop() (string, error) {
-	if len(c.queue) == 0 {
-		return "", ErrEmptyQueue
-	}
-	top := c.queue[0]
-	c.queue = append(c.queue[:0], c.queue[1:]...)
-	return top, nil
 }

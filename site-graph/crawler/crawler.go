@@ -116,6 +116,7 @@ func (c *Crawler) ScrapeChan(ctx context.Context, jobs <-chan Job, results chan<
 			select {
 			case results <- j:
 			case <-time.After(2 * time.Second):
+				c.log.Errorf("timeout: unable to insert %v to results channel", j.URL)
 			}
 		}
 		errCh <- nil
