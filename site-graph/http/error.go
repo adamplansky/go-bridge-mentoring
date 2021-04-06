@@ -2,15 +2,9 @@ package http
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"go.uber.org/zap"
-)
-
-var (
-	ErrUnauthorized = fmt.Errorf("not authorized")
-	ErrInternal     = fmt.Errorf("internal server error")
 )
 
 // httpErr set status code and content-type into http header
@@ -29,7 +23,7 @@ func (s *server) httpErr(w http.ResponseWriter, code int, err error) {
 		// forcing shadowing err
 		if err := json.NewEncoder(w).Encode(e); err != nil {
 			s.log.Error("internal server error", zap.Error(err))
-			http.Error(w, ErrInternal.Error(), 500)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
 		}
 		s.log.Warn("unable to process request", zap.Error(err))
