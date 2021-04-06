@@ -19,26 +19,25 @@ type scrapeParams struct {
 // it uses 1 as default parameter. Query parameter url is mandatory and returns
 // error if is not specified.
 func parseScrapeParams(q url.Values) (*scrapeParams, error) {
-	var params scrapeParams
+	params := scrapeParams{Depth: 1}
+
 	if qDepth := q.Get("depth"); qDepth != "" {
 		depth, err := strconv.Atoi(qDepth)
 		if err != nil {
 			return nil, fmt.Errorf("query parameter 'depth' is invalid: %w", err)
 		}
 		params.Depth = depth
-	} else {
-		params.Depth = 1
 	}
 
-	if rawURL := q.Get("url"); rawURL != "" {
-		URL, err := url.Parse(rawURL)
-		if err != nil {
-			return nil, fmt.Errorf("query parameter 'url' is invalid: %w", err)
-		}
-		params.URL = URL
-	} else {
+	rawURL := q.Get("url")
+	if rawURL == "" {
 		return nil, fmt.Errorf("query parameter 'url' is empty")
 	}
+	URL, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, fmt.Errorf("query parameter 'url' is invalid: %w", err)
+	}
+	params.URL = URL
 
 	return &params, nil
 }

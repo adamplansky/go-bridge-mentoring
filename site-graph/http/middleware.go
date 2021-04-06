@@ -4,18 +4,16 @@ import (
 	"compress/gzip"
 	"crypto/subtle"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
 
 	"go.uber.org/zap"
-
 	"golang.org/x/crypto/bcrypt"
 )
 
 var (
-	ErrUsernameOrPasswordInvalid = fmt.Errorf("username or password is invalid")
+	ErrUsernameOrPasswordInvalid = errors.New("username or password is invalid")
 )
 
 // isAuthenticated return false if username or password
@@ -45,7 +43,7 @@ func (s *server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		username, password, authOK := r.BasicAuth()
 		if authOK == false {
-			s.httpErr(w, http.StatusUnauthorized, ErrUnauthorized)
+			s.httpErr(w, http.StatusUnauthorized, nil)
 			return
 		}
 
