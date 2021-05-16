@@ -21,6 +21,7 @@ func run() error {
 	}
 
 	resultCh := s.RunReporter()
+	defer close(resultCh)
 	s.Scrape(resultCh)
 
 	sig := make(chan os.Signal, 1)

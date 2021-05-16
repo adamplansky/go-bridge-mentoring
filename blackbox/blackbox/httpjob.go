@@ -29,6 +29,8 @@ func (j Job) IsValid() error {
 	return nil
 }
 
+// Do scrapes all target from job's targets and creates Result from them. This
+// Result is passed to scraper reporter using r channel.
 func (j Job) Do(r chan<- Result) {
 	var mu sync.Mutex
 	var responses []http.Response
