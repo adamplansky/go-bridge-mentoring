@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 	"os/signal"
@@ -10,6 +11,11 @@ import (
 )
 
 func run() error {
+	//sig := make(chan os.Signal, 1)
+	////signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
 	jobs := blackbox.ParseInput()
 	logReporter, err := blackbox.NewLogResult()
 	if err != nil {
@@ -22,11 +28,10 @@ func run() error {
 
 	resultCh := s.RunReporter()
 	defer close(resultCh)
-	s.Scrape(resultCh)
 
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
-	<-sig
+	s.Scrape(ctx, resultCh)
+
+	<-ctx.Done()
 
 	return nil
 }

@@ -1,5 +1,7 @@
 package blackbox
 
+import "context"
+
 type reporter interface {
 	// Report reports all responses from given channel.
 	Report(resp <-chan Result)
@@ -33,9 +35,9 @@ func (s *Scraper) RunReporter() chan Result {
 }
 
 // Scrape starts to scrape all jobs. Every job is done in separate go routine.
-func (s *Scraper) Scrape(r chan Result) {
+func (s *Scraper) Scrape(ctx context.Context, r chan Result) {
 	for _, job := range s.jobs {
 		j := job
-		go j.Do(r)
+		go j.Do(ctx, r)
 	}
 }
