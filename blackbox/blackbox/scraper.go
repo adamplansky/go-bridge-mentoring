@@ -1,7 +1,7 @@
 package blackbox
 
+// reporter reports results from every scrape target
 type reporter interface {
-	// Report reports all responses from given channel.
 	Report(resp <-chan Result)
 }
 
@@ -23,16 +23,12 @@ func NewScraper(jobs []Job, r reporter) (*Scraper, error) {
 	}, nil
 }
 
-// RunReporter crates new report channel and spin up new go routine with Report method
-// with this newly created channel. Every scraped job needs to report result into this
-// newly created report channel.
 func (s *Scraper) RunReporter() chan Result {
 	resultCh := make(chan Result)
 	go s.r.Report(resultCh)
 	return resultCh
 }
 
-// Scrape starts to scrape all jobs. Every job is done in separate go routine.
 func (s *Scraper) Scrape(r chan Result) {
 	for _, job := range s.jobs {
 		j := job

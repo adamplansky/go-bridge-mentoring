@@ -13,7 +13,6 @@ type Result struct {
 	err       error
 }
 
-// logResult reports results into zap logger.
 type logResult struct {
 	l *zap.Logger
 }
