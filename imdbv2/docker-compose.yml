@@ -1,0 +1,66 @@
+version: "3.9"
+services:
+  web:
+    image: nginx:alpine
+    volumes:
+      - type: volume
+        source: mydata
+        target: /data
+        volume:
+          nocopy: true
+      - type: bind
+        source: ./static
+        target: /opt/app/static
+
+  db:
+    image: postgres:latest
+    volumes:
+      - "/var/run/postgres/postgres.sock:/var/run/postgres/postgres.sock"
+      - "dbdata:/var/lib/postgresql/data"
+
+volumes:
+  mydata:
+  dbdata:
+#---
+#version: "3.9"
+#services:
+#  zero:
+#    image: dgraph/dgraph:latest
+#    volumes:
+#      – type: volume
+#        source: dgraph
+#        target: /dgraph
+#        volume:
+#          nocopy: true
+#    ports:
+#      – 5080:5080
+#      – 6080:6080
+#    restart: on-failure
+#    command: dgraph zero –my=zero:5080
+#  server:
+#    image: dgraph/dgraph:latest
+#    volumes:
+#      – type: volume
+#        source: dgraph
+#        target: /dgraph
+#        volume:
+#          nocopy: true
+#    ports:
+#      – 8080:8080
+#      – 9080:9080
+#    restart: on-failure
+#    command: dgraph server –my=server:7080 –lru_mb=2048 –zero=zero:5080
+#  ratel:
+#    image: dgraph/dgraph:latest
+#    volumes:
+#      – type: volume
+#        source: dgraph
+#        target: /dgraph
+#        volume:
+#          nocopy: true
+#    ports:
+#      – 8000:8000
+#    command: dgraph-ratel
+#
+#volumes:
+#  dgraph:
