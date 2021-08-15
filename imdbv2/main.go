@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/adamplansky/go-bridge-mentoring/imdbv2/persistance"
-	"go.uber.org/zap"
-	"log"
 	"os"
 	"os/signal"
+
+	"github.com/adamplansky/go-bridge-mentoring/imdbv2/models"
+
+	"github.com/adamplansky/go-bridge-mentoring/imdbv2/persistance"
+	"go.uber.org/zap"
 )
 
 type Link struct {
@@ -21,16 +23,51 @@ type App struct {
 	log *zap.SugaredLogger
 }
 
+// https://dgraph.io/docs/clients/go/
 func (a App) Run(ctx context.Context) error {
-	db, err := persistance.NewDB("localhost:9080")
+	//dsn := os.Getenv("DGRAPH_DSN")
+	//apiKey := os.Getenv("DGRAPH_APIKEY")
+	//if dsn == "" {
+	//	dsn = "localhost:9080"
+	//}
+	const apiKey = ""
+	const dsn = "localhost:9080"
+	db, err := persistance.NewDB(dsn, apiKey)
 	if err != nil {
 		return fmt.Errorf("failed to connect to DB: %w", err)
 	}
 	defer db.Close()
 
-	//txn := db.NewTxn()
-	//defer txn.Commit(ctx)
-	//
+	if err = db.Migrate(ctx, true); err != nil {
+		return fmt.Errorf("db migrate failed: %w", err)
+	}
+
+	resp, err := db.CreateCategory(ctx, models.Category{Title: "title1"})
+	if err != nil {
+		return fmt.Errorf("create category failed: %w", err)
+	}
+	a.log.Info("create category", zap.String("response", resp.String()))
+
+	categories, err := db.ListCategories(ctx)
+	if err != nil {
+		return fmt.Errorf("list categories failed: %w", err)
+	}
+	a.log.Info("list categories")
+	for _, category := range categories {
+		fmt.Printf("category.Title: %s, category.ID: %s\n",
+			category.Title,
+			category.ID,
+		)
+
+		cat, err := db.GetCategory(ctx, category.ID)
+		if err != nil {
+			return fmt.Errorf("get category failed: %w", err)
+		}
+		fmt.Printf("[GET CATEGORY]: category.Title: %s, category.ID: %s\n",
+			cat.Title,
+			cat.ID,
+		)
+	}
 
 	//
 	//link := Link{
@@ -54,44 +91,40 @@ func (a App) Run(ctx context.Context) error {
 
 	q := `
 {
-	query1(func: has(name)){
-		uid
-		age
-		name
-  	}
+	q(func: has(User.name)){
+		User.uid
+		User.name
+		User.age
+  }
 }`
 
 	res, err := db.NewReadOnlyTxn().Query(ctx, q)
 	if err != nil {
 		return fmt.Errorf("query failed %w", err)
 	}
-	fmt.Printf("%s\n", res.Json)
 
-	type Person struct {
-		Uid      string     `json:"uid,omitempty"`
-		Name     string     `json:"name,omitempty"`
-		Age      int        `json:"age,omitempty"`
-	}
-
-	var r struct{
-		People []Person `json:"query1"`
+	var r struct {
+		People []struct {
+			Uid  string `json:"User.uid,omitempty"`
+			Name string `json:"User.name,omitempty"`
+			Age  int    `json:"User.age,omitempty"`
+		} `json:"q"`
 	}
 
 	err = json.Unmarshal(res.Json, &r)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
+	fmt.Println(r)
 	for _, p := range r.People {
 		fmt.Printf("\n--------\n%+v\n", p)
 	}
 
-
-
 	return nil
 }
 
-func pprint(v interface{}){
+func pprint(v interface{}) {
 	s, err := json.MarshalIndent(v, "", "\t")
 	if err != nil {
 		panic(err)
@@ -100,6 +133,8 @@ func pprint(v interface{}){
 }
 
 func main() {
+	fmt.Println("ok")
+
 	logger, err := zap.NewDevelopment()
 	if err != nil {
 		panic(err)
@@ -108,13 +143,12 @@ func main() {
 	log := logger.Sugar()
 	defer logger.Sync() // flushes buffer, if any
 
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer cancel()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
 
 	app := App{log: log}
 
 	if err := app.Run(ctx); err != nil {
-		log.Fatal()
+		log.Fatal(err)
 	}
-
 }

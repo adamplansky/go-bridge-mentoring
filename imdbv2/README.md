@@ -94,6 +94,29 @@ query {
 }
 ```
 
+# GraphQL mutation
+```graphql
+mutation CreateMovie($movieInput: [AddMovieInput!]!) {
+  addMovie(input: $movieInput) {
+    movie {
+      title
+    }
+  }
+}
+
+
+{
+  "movieInput": [
+    {
+      "title": "LOTR2"
+    },
+    {
+      "title": "LOTR3"
+    }
+  ]
+}
+```
+
 
 1) create schema in cloud
 2) add data
