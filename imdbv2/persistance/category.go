@@ -10,9 +10,6 @@ import (
 	"github.com/adamplansky/go-bridge-mentoring/imdbv2/models"
 )
 
-// //txn := db.NewTxn()
-//	//defer txn.Commit(ctx)
-//	//
 
 func (d *DB) CreateCategory(
 	ctx context.Context,
@@ -27,12 +24,13 @@ func (d *DB) CreateCategory(
 }
 
 func (d *DB) ListCategories(ctx context.Context) ([]models.Category, error) {
-	const q = `{
-  q(func: has(title)){
-		uid
-		title
-  }
-}`
+	const q = `
+	{
+  		q(func: has(Category.title)){
+			uid
+			Category.title
+	  	}
+	}`
 	resp, err := d.NewReadOnlyTxn().Query(ctx, q)
 	if err != nil {
 		return nil, fmt.Errorf("query failed: %w", err)
@@ -50,19 +48,13 @@ func (d *DB) ListCategories(ctx context.Context) ([]models.Category, error) {
 
 func (d *DB) GetCategory(ctx context.Context, uid string) (*models.Category, error) {
 	variables := map[string]string{"$id": uid}
-	//q := `{
-	//	q(func: uid($id)) {
-	//		uid
-	//		title
-	//	}
-	//}`
-
-	q := `query getCategory($id: string) {
-    q(func: uid($id)) {
-	uid
-      title
-    }
-  }`
+	const q = `
+	query getCategory($id: string) {
+	    q(func: uid($id)) {
+		uid
+		Category.title
+	    }
+	}`
 
 	resp, err := d.NewReadOnlyTxn().QueryWithVars(ctx, q, variables)
 	if err != nil {

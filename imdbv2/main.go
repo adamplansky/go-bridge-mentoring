@@ -4,13 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"os/signal"
-
-	"github.com/adamplansky/go-bridge-mentoring/imdbv2/models"
-
 	"github.com/adamplansky/go-bridge-mentoring/imdbv2/persistance"
 	"go.uber.org/zap"
+	"os"
+	"os/signal"
 )
 
 type Link struct {
@@ -42,83 +39,25 @@ func (a App) Run(ctx context.Context) error {
 		return fmt.Errorf("db migrate failed: %w", err)
 	}
 
-	resp, err := db.CreateCategory(ctx, models.Category{Title: "title1"})
-	if err != nil {
-		return fmt.Errorf("create category failed: %w", err)
+	if err = db.Seed(ctx); err != nil {
+		return fmt.Errorf("db seed failed: %w", err)
 	}
-	a.log.Info("create category", zap.String("response", resp.String()))
 
 	categories, err := db.ListCategories(ctx)
 	if err != nil {
 		return fmt.Errorf("list categories failed: %w", err)
 	}
-	a.log.Info("list categories")
 	for _, category := range categories {
-		fmt.Printf("category.Title: %s, category.ID: %s\n",
-			category.Title,
-			category.ID,
-		)
-
-		cat, err := db.GetCategory(ctx, category.ID)
-		if err != nil {
-			return fmt.Errorf("get category failed: %w", err)
-		}
-		fmt.Printf("[GET CATEGORY]: category.Title: %s, category.ID: %s\n",
-			cat.Title,
-			cat.ID,
-		)
+		fmt.Println(category)
 	}
 
-	//
-	//link := Link{
-	//	URL:   "https://github.com/dgraph-io/dgo",
-	//	DType: []string{"Link"},
-	//}
-	//
-	//lb, err := json.Marshal(link)
-	//if err != nil {
-	//	return fmt.Errorf("failed to marshal %w", err)
-	//}
-	//
-	//mu := &api.Mutation{
-	//	SetJson: lb,
-	//}
-	//res, err := txn.Mutate(ctx, mu)
-	//if err != nil {
-	//	return fmt.Errorf("failed to mutate %w", err)
-	//}
-	//pprint(res)
-
-	q := `
-{
-	q(func: has(User.name)){
-		User.uid
-		User.name
-		User.age
-  }
-}`
-
-	res, err := db.NewReadOnlyTxn().Query(ctx, q)
+	movies, err := db.ListMovies(ctx)
 	if err != nil {
-		return fmt.Errorf("query failed %w", err)
+		return fmt.Errorf("list movies failed: %w", err)
 	}
 
-	var r struct {
-		People []struct {
-			Uid  string `json:"User.uid,omitempty"`
-			Name string `json:"User.name,omitempty"`
-			Age  int    `json:"User.age,omitempty"`
-		} `json:"q"`
-	}
-
-	err = json.Unmarshal(res.Json, &r)
-	if err != nil {
-		return err
-	}
-
-	fmt.Println(r)
-	for _, p := range r.People {
-		fmt.Printf("\n--------\n%+v\n", p)
+	for _, movie := range movies {
+		fmt.Println(movie.String())
 	}
 
 	return nil
@@ -152,3 +91,5 @@ func main() {
 		log.Fatal(err)
 	}
 }
+
+
