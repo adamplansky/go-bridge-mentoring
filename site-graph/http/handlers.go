@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/adamplansky/go-bridge-mentoring/site-graph/crawler"
+
 	"go.uber.org/zap"
 )
 
@@ -50,12 +52,9 @@ func (s *server) ScrapeHandler(w http.ResponseWriter, r *http.Request) {
 		s.httpErr(w, http.StatusBadRequest, err)
 		return
 	}
-	g, err := s.crawler.Scrape(ctx, *params.URL, params.Depth)
-	if err != nil {
-		s.httpErr(w, http.StatusInternalServerError, err)
-		return
-	}
 
+	collector := crawler.NewCollector(s.log, s.cache)
+	g := collector.Work(ctx, *params.URL, params.Depth)
 	if len(g.Nodes) == 0 {
 		w.WriteHeader(http.StatusNoContent)
 		return
