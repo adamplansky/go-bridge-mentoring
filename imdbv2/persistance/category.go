@@ -72,3 +72,5 @@ func (d *DB) GetCategory(ctx context.Context, uid string) (*models.Category, err
 
 	return &r.Category[0], nil
 }
+
+// filter movies by the person

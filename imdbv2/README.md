@@ -121,3 +121,4 @@ mutation CreateMovie($movieInput: [AddMovieInput!]!) {
 1) create schema in cloud
 2) add data
 3) move query to code
+4) conert dql to grapql

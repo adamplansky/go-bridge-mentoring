@@ -19,3 +19,11 @@ type Film {
   director
 }
 ```
+
+
+query findMovieByPerson($full_name: string) {
+	    q(func: anyof($full_name)) {
+		uid
+		Category.title
+	    }
+	}`

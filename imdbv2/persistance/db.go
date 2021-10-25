@@ -58,7 +58,7 @@ func (d *DB) Migrate(ctx context.Context, cleanDB bool) error {
 
 		Category.title: string @index(exact) .
 
-		Person.full_name: string .
+		Person.full_name: string @index(fulltext) . 
 		Person.born: datetime .
 		Person.description: string .
 
@@ -129,6 +129,11 @@ func (d *DB) Seed(ctx context.Context) error {
 		Born:        timeMustParse("1956-07-09"),
 		Description: "Thomas Jeffrey Hanks was born in Concord, California, to Janet Marylyn (Frager), a hospital worker, and Amos Mefford Hanks, an itinerant cook. His mother's family, originally surnamed \"Fraga\", was entirely Portuguese, while his father was of mostly English ancestry. Tom grew up in what he has called a \"fractured\" family. He moved around a great ...",
 	}
+	resp, err := d.CreatePerson(ctx, personHanks)
+	if err != nil {
+		return fmt.Errorf("create person failed: %w", err)
+	}
+	fmt.Println(resp)
 
 	personDarabont := models.Person{
 		FullName:    "Frank Darabont",
@@ -179,7 +184,7 @@ func (d *DB) Seed(ctx context.Context) error {
 		Keywords:    nil,
 		Comments:    nil,
 	}
-	resp, err := d.CreateMovie(ctx, movForrest)
+	resp, err = d.CreateMovie(ctx, movForrest)
 	if err != nil {
 		return fmt.Errorf("create movie failed: %w", err)
 	}
