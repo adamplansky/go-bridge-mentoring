@@ -1,0 +1,16 @@
+type Movie {
+    title:       String!
+    release_date: DateTime!
+    duration: Int!
+    score:       Int!
+    description: String
+    artists: [Artist] @hasInverse(field: movies)
+}
+
+type Artist {
+    first_name:  String!
+    last_name:   String!
+    birth_date: DateTime!,
+    movies: [Movie] @hasInverse(field: artists)
+}
+
