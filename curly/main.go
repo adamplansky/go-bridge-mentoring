@@ -40,7 +40,7 @@ type Config struct {
 	Verbose       bool
 }
 
-// https://github.com/mayth/go-simple-upload-server
+// ParseConfig https://github.com/mayth/go-simple-upload-server
 func ParseConfig(log *zap.SugaredLogger) (*Config, error) {
 
 	cfg := Config{
